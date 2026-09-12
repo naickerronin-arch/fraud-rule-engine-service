@@ -1,0 +1,73 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  web:
+    resources:
+      add-mappings: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${DEX_ISSUER_URI:http://dex:5556}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: fraud-engine-service
+              uri: http://fraud-engine-service:8081
+              predicates:
+                - Path=/fraud-service/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: fraud-engine-service
+
+            - id: login-service
+              uri: http://login-service:8090
+              predicates:
+                - Path=/dexLogin/**
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      fraud-engine-service:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
+  timelimiter:
+    instances:
+      fraud-engine-service:
+        timeout-duration: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+otel:
+  service:
+    name: ${spring.application.name}
+  traces:
+    exporter: otlp
+  metrics:
+    exporter: none # already have Micrometer -> Prometheus for metrics; avoid a
+                    # second, redundant metrics pipeline through OTel.
+  logs:
+    exporter: none
+  exporter:
+    otlp:
+      endpoint: http://tempo:4318
+
+logging:
+  pattern:
+    console: "%d{ISO8601} [%X{traceId}] %-5level %logger{36} - %msg%n"

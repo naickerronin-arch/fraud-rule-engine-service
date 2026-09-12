@@ -1,0 +1,39 @@
+issuer: http://dex:5556
+
+storage:
+  type: sqlite3
+  config:
+    file: /tmp/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+  passwordConnector: local
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: "fraud-portal@fraudengine.local"
+    hash: "$2b$12$KUqMpR8EkDrrj4jFCxz8JOgd9/Fwx49149Uc8u3rAiU.6b14uixea"
+    username: "fraud-portal"
+    userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+  - email: "compliance-portal@fraudengine.local"
+    hash: "$2b$12$KUqMpR8EkDrrj4jFCxz8JOgd9/Fwx49149Uc8u3rAiU.6b14uixea"
+    username: "compliance-portal"
+    userID: "c6f2f4b0-9f0b-4c1a-8a9a-2f6e4e6c5a11"
+
+staticClients:
+  - id: fraud-portal
+    secret: 'local-secret'
+    name: "Fraud Ops Portal"
+    public: false
+    redirectURIs:
+      - "http://localhost/callback"
+  - id: compliance-portal
+    secret: 'local-secret'
+    name: "Compliance Portal"
+    public: false
+    redirectURIs:
+      - "http://localhost/callback"

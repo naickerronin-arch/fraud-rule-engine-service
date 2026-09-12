@@ -1,0 +1,126 @@
+server:
+  port: 8081
+  servlet:
+    context-path: /fraud-service
+
+spring:
+  application:
+    name: fraud-engine-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${DEX_ISSUER_URI:http://dex:5556}
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://fraud-db:5432/fraud}
+    username: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.fraudengine.core.event.domain
+        spring.json.value.default.type: com.fraudengine.core.event.domain.TransactionEvent
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+environment: ${ENVIRONMENT:local}
+
+gateway:
+  external-url: ${GATEWAY_EXTERNAL_URL:http://localhost:8080}
+
+app:
+  overall-flag-threshold: 50
+  kafka-settings:
+    consumer-concurrency: 6
+    retry-attempts: 3
+    retry-initial-interval-ms: 500
+    retry-backoff-multiplier: 2.0
+  outbox:
+    relay-interval-ms: 100
+    send-timeout-ms: 5000
+    max-attempts: 5
+
+  transaction-types:
+    TRANSFER:
+      enabled-rules: [VELOCITY, GEO, BEHAVIORAL_DEVIATION]
+    ATM_WITHDRAWAL:
+      enabled-rules: [VELOCITY, GEO]
+  velocity:
+    weight: 0.5
+    max-risk-level: 100
+    window-minutes: 10
+    default-max-transactions: 5
+    min-history-count: 20
+    transaction-window: 30
+    multiplier: 3
+    alert-threshold: 2.0
+  geo:
+    weight: 0.3
+    max-risk-level: 100
+    min-transaction-count: 20
+    level-one-threshold-percent: 30
+    level-two-threshold-percent: 50
+    level-three-threshold-percent: 80
+    level-one-risk-level: 30
+    level-two-risk-level: 55
+    level-three-risk-level: 80
+  behavioral-deviation:
+    weight: 0.2
+    max-risk-level: 100
+    min-history-count: 20
+    std-dev-threshold: 3
+    alert-threshold: 5.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# management.tracing.*/management.otlp.tracing.* (used previously) are dead
+# properties on this Spring Boot version — nothing reads them at all. This
+# starter's own otel.* properties are what actually configure it.
+otel:
+  service:
+    name: ${spring.application.name}
+  traces:
+    exporter: otlp
+  metrics:
+    exporter: none # already have Micrometer -> Prometheus for metrics; avoid a
+                    # second, redundant metrics pipeline through OTel.
+  logs:
+    exporter: none
+  exporter:
+    otlp:
+      endpoint: http://tempo:4318
+
+logging:
+  level:
+    root: INFO
+  pattern:
+    console: "%d{ISO8601} [%X{traceId}] %-5level %logger{36} - %msg%n"
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html # default paths — the /api prefix now comes from
+  api-docs:                # server.servlet.context-path above, same as every
+    path: /v3/api-docs     # other endpoint in this service.
