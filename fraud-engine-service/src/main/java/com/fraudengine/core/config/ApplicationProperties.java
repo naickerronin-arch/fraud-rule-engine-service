@@ -35,7 +35,6 @@ public class ApplicationProperties {
     @Data
     public abstract static class BaseRuleConfig {
         private double weight = 0.33; // default rule weighting
-        private int maxRiskLevel = 100;
     }
 
     @Data

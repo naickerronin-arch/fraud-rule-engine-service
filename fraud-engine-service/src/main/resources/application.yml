@@ -60,18 +60,16 @@ app:
       enabled-rules: [VELOCITY, GEO, BEHAVIORAL_DEVIATION]
     ATM_WITHDRAWAL:
       enabled-rules: [VELOCITY, GEO]
-  velocity:
+  velocity-config:
     weight: 0.5
-    max-risk-level: 100
     window-minutes: 10
     default-max-transactions: 5
     min-history-count: 20
     transaction-window: 30
     multiplier: 3
     alert-threshold: 2.0
-  geo:
+  location-config:
     weight: 0.3
-    max-risk-level: 100
     min-transaction-count: 20
     level-one-threshold-percent: 30
     level-two-threshold-percent: 50
@@ -79,9 +77,8 @@ app:
     level-one-risk-level: 30
     level-two-risk-level: 55
     level-three-risk-level: 80
-  behavioral-deviation:
+  behavioral-deviation-config:
     weight: 0.2
-    max-risk-level: 100
     min-history-count: 20
     std-dev-threshold: 3
     alert-threshold: 5.0
