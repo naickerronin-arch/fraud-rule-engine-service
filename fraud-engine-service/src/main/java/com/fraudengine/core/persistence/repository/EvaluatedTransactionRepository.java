@@ -68,9 +68,9 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
 
     @Query(
             value = """
-                SELECT AVG(amount) AS avgAmount,
-                       STDDEV_SAMP(amount) AS stdDevAmount,
-                       COUNT(*) AS sampleCount
+                SELECT AVG(amount) AS avg_amount,
+                       STDDEV_SAMP(amount) AS std_dev_amount,
+                       COUNT(*) AS sample_count
                 FROM evaluated_transactions
                 WHERE account_id = :accountNumber
                   AND id <> :transactionId
@@ -82,9 +82,9 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
 
     @Query(
             value = """
-                SELECT AVG(amount) AS avgAmount,
-                       STDDEV_SAMP(amount) AS stdDevAmount,
-                       COUNT(*) AS sampleCount
+                SELECT AVG(amount) AS avg_amount,
+                       STDDEV_SAMP(amount) AS std_dev_amount,
+                       COUNT(*) AS sample_count
                 FROM evaluated_transactions
                 WHERE transaction_type = :transactionType
                   AND id <> :transactionId
