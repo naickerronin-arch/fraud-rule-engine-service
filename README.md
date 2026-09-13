@@ -10,14 +10,16 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 **Services:**
 
 - **`api-gateway`** — the only host-exposed entry point (`:8888`). Validates JWTs against
-  Dex, derives a role (`FraudTeam` / `ComplianceTeam`) from the token's `aud` claim, and
-  routes to the two internal services, with a 5s response timeout.
+  Dex, derives a role (`FraudTeam` / `ComplianceTeam`) from the token's `aud` claim, enforces
+  the `ComplianceTeam`-only override endpoint, and routes to the two internal services with a
+  5s response timeout. Errors use Spring Boot's default error responses.
 - **`login-service`** — dev/demo convenience only, no host port of its own (reached through
   the gateway at `/dexLogin/**`). Wraps a password-grant call to Dex so grading doesn't
   require hand-rolling the token request.
 - **`fraud-engine-service`** — the core domain. Three independent Kafka consumers (one per
   rule, each its own consumer group so every rule gets the full transaction stream), the
-  Postgres-backed evaluation/storage layer, and the compliance/fraud-admin REST API.
+  Postgres-backed evaluation/storage layer, the transactional outbox, and the
+  compliance/fraud-admin REST API.
 - **`dex`** — OIDC identity provider, standing in for whatever enterprise IdP a real
   deployment would already have. No host port — only the gateway and login-service talk
   to it, never a browser directly.
@@ -28,30 +30,43 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 - **`prometheus`, `tempo`, `grafana`** — metrics, traces, and one dashboard UI over both.
 
 **Event flow:** transactions arrive on `${environment}-transaction-created` (6 partitions,
-keyed for per-account ordering). Each rule's consumer independently upserts a base
-`evaluated_transactions` row, checks whether it's enabled for that transaction's type,
-evaluates, and writes its own `rule_hits` row. Whichever rule's write is the *last* one
-needed for that transaction (a config-driven expected-rule-count check, not a polling cron)
-fires a `fraud.check.complete` event via a transactional outbox — avoiding a dual-write
-between the DB commit and the Kafka publish.
+keyed for per-account ordering). Each rule's consumer validates the payload on consumption
+(`@Valid`), then:
+
+1. rejects transaction types with no rules configured (sent straight to the DLT),
+2. upserts the base `evaluated_transactions` row (`INSERT ... ON CONFLICT DO NOTHING`),
+3. evaluates its rule if it's enabled for that transaction type and writes its own `rule_hits` row,
+4. locks the transaction row and checks whether every enabled rule has now reported.
+
+The rule that finds all hits present sets the verdict (`flagged`) and writes a
+`fraud-check-complete` event to the outbox **in the same database transaction**. A scheduled
+relay publishes outbox rows to Kafka and marks them `PUBLISHED`, retrying with backoff and
+marking them `FAILED` (plus a `dead_letter` row) after 5 attempts. Invalid or undeserializable
+messages go to `${environment}-transaction-created-dlt` and are recorded in `dlt_audit_log`.
 
 **Active rules** (`fraud-engine-service/.../rule/strategy/`):
 - **Velocity** — flags an account exceeding a transaction-count threshold within a rolling
   window. Standalone-capable: confident enough on its own evidence to flag a transaction
   by itself.
 - **Behavioral deviation** — flags a transaction whose amount deviates from an account's
-  own historical baseline, with a cohort-level fallback baseline so new accounts aren't
-  unprotected from transaction #1. The baseline leaves out the transaction being checked.
-  Also standalone-capable.
+  own historical baseline, with a cohort-level fallback baseline (same transaction type) so
+  new accounts aren't unprotected from transaction #1. The baseline leaves out the
+  transaction being checked, otherwise an outlier would drag its own average and standard
+  deviation towards itself. Also standalone-capable.
 - **Location** — computes each area code's fraud rate live, on every transaction
-  (`% of that area's transactions flagged`), with a minimum-transaction-count floor so a
-  handful of transactions can't produce a statistically meaningless rate. **Corroboration-only,
-  not standalone-capable**: a bad-location match alone can never flag a transaction — Location
+  (`% of that area's decided transactions that were flagged`, ignoring transactions still
+  waiting for a verdict), with a minimum-transaction-count floor so a handful of transactions
+  can't produce a statistically meaningless rate. **Corroboration-only, not
+  standalone-capable**: a bad-location match alone can never flag a transaction — Location
   detects "this is a known-bad area," not "this specific transaction is fraud," so it only
   contributes to the weighted score (see below). `canFlagStandalone()` on the `FraudRule`
   interface defaults to `true`; Location is the one rule that overrides it to `false`, and a
   new rule can opt into the same corroboration-only behavior without touching any dispatch
   logic elsewhere.
+
+Rule thresholds and weights live in `application.yml` under `app.velocity-config`,
+`app.location-config` and `app.behavioral-deviation-config` (velocity 0.5, location 0.3,
+behavioral 0.2).
 
 **Fraud verdict — hybrid standalone-or-corroborated, not a flat OR across rules:**
 a transaction is flagged if *either* a standalone-capable rule is independently confident
@@ -65,21 +80,23 @@ normalized against those two rules' weights, not silently capped below what `TRA
 **No human confirmation gate anywhere in this loop.** Detection and location-tiering are
 both fully automatic and live — no cron, no maker step blocking a location's fraud rate
 from being recognized. The one remaining human action is `ComplianceTeam` **overriding** a
-specific transaction's verdict after the fact (`POST /admin/transactions/{id}/override`) —
-a correction, not a gate. The override never overwrites the system's own verdict; both are
-kept (`evaluated_transactions.flagged` vs `.overridden_flagged`), and every reader
-(the API, Location's own rate calculation) treats `COALESCE(overridden_flagged, flagged)`
-as the effective verdict — so a correction actually changes what counts as fraud for
-scoring purposes, without destroying the original evidence of what the system concluded.
+specific transaction's verdict after the fact (`POST /admin/transactions/{id}/override` with
+`{"flagged": true|false}`) — a correction, not a gate. The override never overwrites the
+system's own verdict; both are kept (`evaluated_transactions.flagged` vs
+`.overridden_flagged`, plus `overridden_at`), and every reader (the API, Location's own rate
+calculation) treats `COALESCE(overridden_flagged, flagged)` as the effective verdict — so a
+correction actually changes what counts as fraud for scoring purposes, without destroying the
+original evidence of what the system concluded. The transactions API returns that effective
+verdict as `status` (`FLAGGED`, `CLEAR` or `PENDING`) alongside the system and override values.
 
 **Storage** (Flyway-managed Postgres): `evaluated_transactions` (every transaction seen,
-pass or fail, plus the system's own verdict and any human override), `rule_hits` (one row
+pass or fail, plus the system's own verdict and any override), `rule_hits` (one row
 per transaction/rule, deliberately normalized over JSONB for queryability), `bad_locations`
 (a live, continuously-recomputed snapshot of each area code's current fraud-rate level, not
 a maker-checker workflow table), `dlt_audit_log` (forensic metadata for anything that
 failed deserialization/validation badly enough to reach the DLT), and `outbox_events` /
-`dead_letter` (transactional outbox for the completion
-event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status).
+`dead_letter` (transactional outbox for the completion event; outbox rows are never deleted
+and are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status).
 
 ## Key trade-offs
 
@@ -92,6 +109,9 @@ event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED`
   support it (confirmed against a live instance, not assumed). Documented explicitly as a
   Dex-specific limitation, not a demo shortcut standing in for a different production
   pattern.
+- **Roles are enforced at the gateway only.** `fraud-engine-service` just requires a valid
+  token; it isn't reachable from outside the Docker network, so the gateway is the single
+  place role mappings live.
 - **No schema registry (Jackson + Bean Validation DTOs, not Avro).** Considered and
   rejected as more infrastructure than this scope justifies.
 - **Kafka replication factor 1.** Explicit local-demo limitation — a real deployment would
@@ -108,17 +128,16 @@ event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED`
   insert the base row exactly once instead of N racing rule-consumer attempts) and
   rejected — it introduces a real ordering race against the independent rule consumers,
   concretely dangerous for anything relying on the row already existing. Each rule handler
-  does its own idempotent `INSERT ... ON CONFLICT DO NOTHING` instead; "is evaluation
-  complete" is derived on read (comparing hit count to expected rule count) rather than
-  stored as mutable state, so there's no completion flag that could silently fail to
-  update.
+  does its own idempotent `INSERT ... ON CONFLICT DO NOTHING` instead.
 - **Fan-in completion is decided under a row lock, not just "usually fine."** With 3
   independent rule consumers racing to detect "am I last," a naive read-then-write could
   let two of them both publish, or let two finishing at the same time each miss the other's
   hit so nobody publishes. Each rule locks the transaction row (`SELECT ... FOR UPDATE`)
   before counting hits, so whoever holds the lock sees every committed hit. The first rule
   to find them all sets `flagged`; any rule after it sees `flagged` already set and backs
-  off. The verdict and the outbox row are written in the same database transaction.
+  off. The verdict and the outbox row are written in the same database transaction. This
+  works because every rule writes to the same database; if rules ever moved into separate
+  services, an aggregator consuming per-rule results keyed by transaction would replace it.
 - **Location auto-tiers off any rule hit now, deliberately — but only because it lost
   standalone authority at the same time.** An earlier version of this design required
   human-confirmed fraud (not any rule hit) before auto-promoting a location, specifically
@@ -133,12 +152,30 @@ event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED`
   at whatever level that history produces, diluting only as new clean transactions
   accumulate. A time-windowed rate would decay faster; left as a known simplification, not
   implemented for this scope.
+- **Overrides record the new verdict and when, not who or why.** Free-text reason and
+  "actioned by" columns were removed to keep scope down; a proper audit trail is future work.
+- **Application metrics are recorded in one AOP aspect** (`FraudEngineMetricsAspect`) so the
+  handlers stay free of metrics code. Pointcuts match on class/method names, which can break
+  silently on a rename — `FraudEngineMetricsAspectTest` fails if an advice stops firing.
 - **TLS terminates at the gateway only; internal traffic is plain HTTP.** The internal
   Docker network is unreachable from outside except through the gateway. A real deployment
   would terminate TLS at the gateway/load balancer identically — this is a stated local-demo
   simplification, not a different security posture.
 
+## Known limitations
+
+- Rule history isn't bounded to the evaluated transaction's timestamp. Because each rule is its
+  own consumer group, a rule that falls behind the others can count transactions for the same
+  account that arrived after the one it's evaluating.
+- `fraud-engine-service`'s Prometheus metrics are reachable through the gateway without a token
+  (`/fraud-service/actuator/prometheus`).
+- The database connection pool uses Hikari's default of 10 while 4 listeners run 6 consumers
+  each; set `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` per environment for real load.
+- Both demo logins share one password, and wrong login credentials return `500` rather than `401`.
+
 ## Running locally
+
+From the repository root:
 
 ```bash
 cp .env.example .env
@@ -169,26 +206,60 @@ curl -H "Authorization: Bearer <token>" http://localhost:8888/fraud-service/tran
 Both are wired with a Bearer auth scheme — paste a token into "Authorize" and "Try it out"
 works directly in the browser.
 
-**Grafana:** http://localhost:3000 — one dashboard (`Fraud Engine Overview`) covering
-service health, HTTP latency, JVM heap, Kafka consumer lag, and per-rule hit rate
-(`fraud_rule_evaluated_total{rule,flagged}`).
-
 **Pushing a test transaction directly onto Kafka** (bypassing the API, to exercise rule
 evaluation in isolation):
 
 ```bash
 echo '{"transactionId":"txn-001","accountNumber":"ACC-1001","amount":250.00,"timestamp":"2026-01-01T12:00:00Z","transactionType":"TRANSFER","areaCode":"JHB-001"}' \
   | docker compose exec -T kafka /opt/kafka/bin/kafka-console-producer.sh \
-      --broker-list localhost:9092 --topic local-transaction-created
+      --bootstrap-server localhost:9092 --topic local-transaction-created
 ```
+
+## Observability
+
+**Grafana:** http://localhost:3000 (first login `admin` / `admin`) — one dashboard,
+`Fraud Rule Engine — Overview`, provisioned from `observability/dashboards/json`:
+
+- service up/down, HTTP request rate and p95 latency, JVM heap, gateway 4xx/5xx
+- transactions without a verdict and failed outbox events (both turn red at 1+)
+- Kafka consumer lag per consumer group, DB connection pool usage
+- rule-hit rate, rule errors and average evaluation time per rule
+- fraud flag rate, completion rate, compliance overrides, DLT rate
+
+**Application metrics** (all from `fraud-engine-service`):
+
+| Metric | Tags | Recorded by |
+|---|---|---|
+| `fraud_rule_evaluated_total` | `rule`, `status` (`EVALUATED`, `SKIPPED_MISSING_DATA`, `ERROR`), `flagged` | aspect, around `FraudRule.evaluateRule` |
+| `fraud_rule_duration_seconds` | `rule` | aspect, around `FraudRule.evaluateRule` |
+| `fraud_check_complete_total` | `flagged` | aspect, after the verdict and outbox row commit |
+| `fraud_transaction_override_total` | `flagged` | aspect, after an override |
+| `fraud_dlt_received_total` | — | aspect, on each DLT audit entry |
+| `fraud_transactions_pending` | — | `BacklogMetrics` gauge, refreshed every 30s |
+| `fraud_outbox_events` | `status` | `BacklogMetrics` gauge, refreshed every 30s |
+
+Rule-hit and completion counters are created on first use, so with very little test traffic a
+`rate()` panel can look empty until a series has changed at least once — query the raw counter
+in Grafana Explore to check.
 
 ## Testing
 
-Automated tests (unit + Testcontainers-backed Kafka/Postgres integration tests) were part
-of the original design intent but are **not yet implemented** in this submission —
-end-to-end behavior was instead verified manually: pushing transactions directly onto
-Kafka and confirming the resulting `evaluated_transactions`/`rule_hits` rows, exercising
-every API endpoint through the gateway with real tokens for both roles, and confirming
-`FraudTeam` is correctly rejected (`403`) from the `ComplianceTeam`-only override endpoint.
+`fraud-engine-service` has unit tests (JUnit 5, Mockito, AssertJ — no Spring context, database
+or Kafka) covering the rule maths, the risk score, rule handling and completion, the outbox
+writer and relay, the metrics aspect and backlog gauges, and the REST controllers' status codes
+and validation.
 
-No CI pipeline is wired up in this submission either, for the same reason.
+Run them with Maven, or without a local JDK:
+
+```bash
+docker run --rm -v "${PWD}/fraud-engine-service:/build" -w /build maven:3.9-eclipse-temurin-25 mvn -B test
+```
+
+Not covered yet, and better suited to Testcontainers integration tests: the repository SQL
+(row lock, stats and area queries), the completion race under real concurrency, and the Kafka
+listener wiring. End-to-end behaviour has been verified manually by pushing transactions onto
+Kafka, checking `evaluated_transactions` / `rule_hits` / outbox rows and the metrics, and
+exercising the API through the gateway with tokens for both roles (including `FraudTeam` being
+rejected with `403` from the override endpoint).
+
+No CI pipeline is wired up yet.

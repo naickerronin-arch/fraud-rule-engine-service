@@ -42,6 +42,36 @@
       }
     },
     {
+      "id": 16,
+      "type": "stat",
+      "title": "Transactions without a verdict",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "fraud_transactions_pending", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Failed outbox events",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "fraud_outbox_events{status=\"FAILED\"}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        }
+      }
+    },
+    {
       "id": 3,
       "type": "timeseries",
       "title": "HTTP request rate (per service)",
@@ -51,6 +81,21 @@
         {
           "expr": "sum by (job) (rate(http_server_requests_seconds_count[1m]))",
           "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Rule errors (per rule)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(fraud_rule_evaluated_total{status=\"ERROR\"}[5m]))",
+          "legendFormat": "{{rule}}",
           "refId": "A"
         }
       ],
@@ -72,6 +117,21 @@
       "fieldConfig": { "defaults": { "unit": "s" } }
     },
     {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Rule evaluation time (avg, per rule)",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(fraud_rule_duration_seconds_sum[5m])) / sum by (rule) (rate(fraud_rule_duration_seconds_count[5m]))",
+          "legendFormat": "{{rule}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
       "id": 5,
       "type": "timeseries",
       "title": "JVM heap used (per service)",
@@ -87,15 +147,41 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } }
     },
     {
+      "id": 12,
+      "type": "timeseries",
+      "title": "DB connection pool (fraud-engine-service)",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "sum(hikaricp_connections_active{job=\"fraud-engine-service\"})", "legendFormat": "active", "refId": "A" },
+        { "expr": "sum(hikaricp_connections_pending{job=\"fraud-engine-service\"})", "legendFormat": "waiting for a connection", "refId": "B" },
+        { "expr": "sum(hikaricp_connections_max{job=\"fraud-engine-service\"})", "legendFormat": "max", "refId": "C" }
+      ]
+    },
+    {
       "id": 6,
       "type": "timeseries",
-      "title": "Kafka consumer lag (per rule consumer group) — NOTE: metric name to verify once fraud-engine-service actually runs with real consumers; Micrometer's Kafka binder naming can vary slightly by version",
+      "title": "Kafka consumer lag (per consumer group)",
       "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "targets": [
         {
-          "expr": "kafka_consumer_fetch_manager_records_lag_max",
-          "legendFormat": "{{spring_id}}",
+          "expr": "sum by (group) (label_replace(kafka_consumer_fetch_manager_records_lag, \"group\", \"$1\", \"client_id\", \"consumer-(.+)-[0-9]+\"))",
+          "legendFormat": "{{group}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Outbox events (by status)",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "fraud_outbox_events",
+          "legendFormat": "{{status}}",
           "refId": "A"
         }
       ]
@@ -114,6 +200,21 @@
         }
       ],
       "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Fraud flag rate",
+      "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(fraud_check_complete_total{flagged=\"true\"}[5m])) / sum(rate(fraud_check_complete_total[5m]))",
+          "legendFormat": "flagged",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
     },
     {
       "id": 8,
@@ -140,6 +241,35 @@
         {
           "expr": "sum by (flagged) (rate(fraud_check_complete_total[1m]))",
           "legendFormat": "flagged={{flagged}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Compliance overrides (last hour)",
+      "gridPos": { "x": 12, "y": 44, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (flagged) (increase(fraud_transaction_override_total[1h]))",
+          "legendFormat": "overridden to flagged={{flagged}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Gateway 4xx / 5xx responses",
+      "gridPos": { "x": 18, "y": 44, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"api-gateway\", status=~\"4..|5..\"}[5m]))",
+          "legendFormat": "{{status}}",
           "refId": "A"
         }
       ],
