@@ -25,28 +25,30 @@ public class FraudEngineMetricsAspect {
     private static final String METRIC_FRAUD_CHECK_COMPLETE = "fraud.check.complete";
     private static final String METRIC_TRANSACTION_OVERRIDE = "fraud.transaction.override";
     private static final String METRIC_DLT_RECEIVED = "fraud.dlt.received";
+    private static final String STATUS_ERROR = "ERROR";
 
     private final MetricsRecorder metricsRecorder;
 
     @Around("execution(* com.fraudengine.core.rule.FraudRule+.evaluateRule(..)) && target(rule)")
     public Object recordRuleEvaluation(final ProceedingJoinPoint joinPoint, final FraudRule rule) throws Throwable {
         long startNanos = System.nanoTime();
+        Object result;
         try {
-            Object result = joinPoint.proceed();
-            if (result instanceof RuleResult ruleResult) {
-                metricsRecorder.increment(
-                        METRIC_RULE_EVALUATED,
-                        "rule", rule.ruleType().name(),
-                        "status", ruleResult.status().name(),
-                        "flagged", String.valueOf(ruleResult.flagged()));
-            }
-            return result;
+            result = joinPoint.proceed();
+        } catch (Throwable e) {
+            recordRuleEvaluated(rule, STATUS_ERROR, false);
+            throw e;
         } finally {
             metricsRecorder.recordDuration(
                     METRIC_RULE_DURATION,
                     Duration.ofNanos(System.nanoTime() - startNanos),
                     "rule", rule.ruleType().name());
         }
+
+        if (result instanceof RuleResult ruleResult) {
+            recordRuleEvaluated(rule, ruleResult.status().name(), ruleResult.flagged());
+        }
+        return result;
     }
 
     @AfterReturning("execution(* com.fraudengine.core.outbox.OutboxWriter.publish(..)) && args(event)")
@@ -73,6 +75,14 @@ public class FraudEngineMetricsAspect {
         } finally {
             metricsRecorder.increment(METRIC_DLT_RECEIVED);
         }
+    }
+
+    private void recordRuleEvaluated(final FraudRule rule, final String status, final boolean flagged) {
+        metricsRecorder.increment(
+                METRIC_RULE_EVALUATED,
+                "rule", rule.ruleType().name(),
+                "status", status,
+                "flagged", String.valueOf(flagged));
     }
 
 }
