@@ -67,12 +67,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(errorResponse);
     }
 
+    @ExceptionHandler(TransactionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleTransactionNotFoundException(final TransactionNotFoundException ex) {
+        return buildFraudEngineError(ex, HttpStatus.NOT_FOUND);
+    }
+
     @ExceptionHandler(FraudEngineException.class)
     public ResponseEntity<ErrorResponse> handleFraudEngineException(final FraudEngineException ex) {
-        MessageUtil.ErrorDetail error = messageUtil.getError(ex.messageKey());
-        LOGGER.error("Fraud Engine error: code={}, message={}, detail={}", error.getCode(), error.getMessage(), ex.getMessage());
-        var response = new GenericExceptionResponse(error.getCode(), error.getMessage());
-        return ResponseEntity.badRequest().body(new ErrorResponse(ErrorResponseType.SERVICE_ERROR, List.of(response)));
+        return buildFraudEngineError(ex, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler(Exception.class)
@@ -82,5 +84,12 @@ public class GlobalExceptionHandler {
         var response = new GenericExceptionResponse(error.getCode(), error.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(ErrorResponseType.SERVICE_ERROR, List.of(response)));
+    }
+
+    private ResponseEntity<ErrorResponse> buildFraudEngineError(final FraudEngineException ex, final HttpStatus status) {
+        MessageUtil.ErrorDetail error = messageUtil.getError(ex.messageKey());
+        LOGGER.error("Fraud Engine error: code={}, message={}, detail={}", error.getCode(), error.getMessage(), ex.getMessage());
+        var response = new GenericExceptionResponse(error.getCode(), error.getMessage());
+        return ResponseEntity.status(status).body(new ErrorResponse(ErrorResponseType.SERVICE_ERROR, List.of(response)));
     }
 }

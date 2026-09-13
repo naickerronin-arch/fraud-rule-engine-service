@@ -22,4 +22,8 @@ public class EvaluatedTransactionResponse {
     private String transactionType;
     private String areaCode;
     private Instant createdAt;
+    private String status; // FLAGGED, CLEAR or PENDING
+    private Boolean flagged;
+    private Boolean overriddenFlagged;
+    private Instant overriddenAt;
 }

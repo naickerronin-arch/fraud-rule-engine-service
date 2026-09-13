@@ -24,6 +24,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TransactionQueryService {
 
+    private static final String STATUS_FLAGGED = "FLAGGED";
+    private static final String STATUS_CLEAR = "CLEAR";
+    private static final String STATUS_PENDING = "PENDING";
+
     private final EvaluatedTransactionRepository evaluatedTransactionRepository;
     private final RuleHitRepository ruleHitRepository;
 
@@ -67,7 +71,21 @@ public class TransactionQueryService {
                 .transactionType(transaction.getTransactionType())
                 .areaCode(transaction.getAreaCode())
                 .createdAt(transaction.getCreatedAt())
+                .status(effectiveStatus(transaction))
+                .flagged(transaction.getFlagged())
+                .overriddenFlagged(transaction.getOverriddenFlagged())
+                .overriddenAt(transaction.getOverriddenAt())
                 .build();
+    }
+
+    private String effectiveStatus(final EvaluatedTransaction transaction) {
+        Boolean effective = transaction.getOverriddenFlagged() != null
+                ? transaction.getOverriddenFlagged()
+                : transaction.getFlagged();
+        if (effective == null) {
+            return STATUS_PENDING;
+        }
+        return effective ? STATUS_FLAGGED : STATUS_CLEAR;
     }
 
     private RuleHitResponse mapToRuleHitResponse(final RuleHit hit) {
@@ -84,8 +102,8 @@ public class TransactionQueryService {
             return null;
         }
         return switch (status.toUpperCase()) {
-            case "FLAGGED" -> Boolean.TRUE;
-            case "CLEAR" -> Boolean.FALSE;
+            case STATUS_FLAGGED -> Boolean.TRUE;
+            case STATUS_CLEAR -> Boolean.FALSE;
             default -> null;
         };
     }
