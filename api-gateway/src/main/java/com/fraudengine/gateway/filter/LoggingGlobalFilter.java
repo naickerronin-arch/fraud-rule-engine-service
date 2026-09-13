@@ -20,12 +20,10 @@ public class LoggingGlobalFilter implements GlobalFilter, Ordered {
 
         if (log.isTraceEnabled()) {
             log.trace(
-                    "Incoming request: requestId={}, method={}, uri={}, headers={}, params={}",
+                    "Incoming request: requestId={}, method={}, uri={}",
                     requestId,
                     exchange.getRequest().getMethod(),
-                    exchange.getRequest().getURI(),
-                    exchange.getRequest().getHeaders(),
-                    exchange.getRequest().getQueryParams());
+                    exchange.getRequest().getURI());
         }
 
         long startTime = System.currentTimeMillis();
@@ -42,7 +40,6 @@ public class LoggingGlobalFilter implements GlobalFilter, Ordered {
                         requestId,
                         responseStatus,
                         exchange.getRequest().getURI(),
-                        exchange.getRequest().getHeaders(),
                         elapsedTime);
             }
         });
