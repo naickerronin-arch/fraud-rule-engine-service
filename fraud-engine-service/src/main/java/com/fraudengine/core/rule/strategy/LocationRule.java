@@ -63,12 +63,13 @@ public class LocationRule implements FraudRule {
     private int computeLevel(final String areaCode) {
         ApplicationProperties.LocationConfig config = properties.getLocationConfig();
 
-        long total = evaluatedTransactionRepository.countByAreaCode(areaCode);
+        EvaluatedTransactionRepository.AreaStats stats = evaluatedTransactionRepository.findAreaStats(areaCode);
+        long total = stats.getTotal();
         if (total < config.getMinTransactionCount()) {
             return 0;
         }
 
-        long flagged = evaluatedTransactionRepository.countEffectiveFlaggedByAreaCode(areaCode);
+        long flagged = stats.getFlagged();
         double percentage = (flagged * 100.0) / total;
 
         if (percentage >= config.getLevelThreeThresholdPercent()) {

@@ -38,15 +38,16 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
 
     long countByAccountNumber(String accountNumber);
 
-    long countByAreaCode(String areaCode);
-
     @Query(
             value = """
-                SELECT COUNT(*) FROM evaluated_transactions
-                WHERE area_code = :areaCode AND COALESCE(overridden_flagged, flagged) = true
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE COALESCE(overridden_flagged, flagged)) AS flagged
+                FROM evaluated_transactions
+                WHERE area_code = :areaCode
+                  AND COALESCE(overridden_flagged, flagged) IS NOT NULL
                 """,
             nativeQuery = true)
-    long countEffectiveFlaggedByAreaCode(@Param("areaCode") String areaCode);
+    AreaStats findAreaStats(@Param("areaCode") String areaCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<EvaluatedTransaction> findLockedById(String id);
@@ -76,9 +77,12 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
                        COUNT(*) AS sampleCount
                 FROM evaluated_transactions
                 WHERE account_id = :accountNumber
+                  AND id <> :transactionId
                 """,
             nativeQuery = true)
-    AmountStats findAmountStatsByAccountNumber(@Param("accountNumber") String accountNumber);
+    AmountStats findAmountStatsByAccountNumber(
+            @Param("accountNumber") String accountNumber,
+            @Param("transactionId") String transactionId);
 
     @Query(
             value = """
@@ -87,9 +91,12 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
                        COUNT(*) AS sampleCount
                 FROM evaluated_transactions
                 WHERE transaction_type = :transactionType
+                  AND id <> :transactionId
                 """,
             nativeQuery = true)
-    AmountStats findAmountStatsByTransactionType(@Param("transactionType") String transactionType);
+    AmountStats findAmountStatsByTransactionType(
+            @Param("transactionType") String transactionType,
+            @Param("transactionId") String transactionId);
     @Query(
             value = """
                 SELECT et.* FROM evaluated_transactions et
@@ -122,5 +129,11 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
 
         BigDecimal getStdDevAmount();
 
+    }
+
+    interface AreaStats {
+        Long getTotal();
+
+        Long getFlagged();
     }
 }

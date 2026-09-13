@@ -41,8 +41,8 @@ public class BehavioralDeviationRule implements FraudRule {
         boolean baseLine = lifetimeCount >= config.getMinHistoryCount();
 
         EvaluatedTransactionRepository.AmountStats stats = baseLine
-                ? evaluatedTransactionRepository.findAmountStatsByAccountNumber(accountNumber)
-                : evaluatedTransactionRepository.findAmountStatsByTransactionType(transaction.getTransactionType());
+                ? evaluatedTransactionRepository.findAmountStatsByAccountNumber(accountNumber, transaction.getTransactionId())
+                : evaluatedTransactionRepository.findAmountStatsByTransactionType(transaction.getTransactionType(), transaction.getTransactionId());
 
         if (stats == null || stats.getStdDevAmount() == null || stats.getStdDevAmount().signum() == 0) {
             return RuleResult.builder()

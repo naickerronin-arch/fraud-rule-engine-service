@@ -40,13 +40,9 @@ between the DB commit and the Kafka publish.
   window. Standalone-capable: confident enough on its own evidence to flag a transaction
   by itself.
 - **Behavioral deviation** — flags a transaction whose amount deviates from an account's
-  own historical baseline, with a cohort-level fallback baseline (same transaction type,
-  last 30 days) so new accounts aren't unprotected from transaction #1. The baseline
-  leaves out the transaction being checked and anything flagged as fraud. Also
-  standalone-capable.
-
-Rules only look at transactions up to the timestamp of the one being evaluated, so a rule
-that's behind the others doesn't count transactions that came after it.
+  own historical baseline, with a cohort-level fallback baseline so new accounts aren't
+  unprotected from transaction #1. The baseline leaves out the transaction being checked.
+  Also standalone-capable.
 - **Location** — computes each area code's fraud rate live, on every transaction
   (`% of that area's transactions flagged`), with a minimum-transaction-count floor so a
   handful of transactions can't produce a statistically meaningless rate. **Corroboration-only,
