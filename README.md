@@ -77,8 +77,8 @@ pass or fail, plus the system's own verdict and any human override), `rule_hits`
 per transaction/rule, deliberately normalized over JSONB for queryability), `bad_locations`
 (a live, continuously-recomputed snapshot of each area code's current fraud-rate level, not
 a maker-checker workflow table), `dlt_audit_log` (forensic metadata for anything that
-failed deserialization/validation badly enough to reach the DLT, including which consumer
-group sent it), and `outbox_events` / `dead_letter` (transactional outbox for the completion
+failed deserialization/validation badly enough to reach the DLT), and `outbox_events` /
+`dead_letter` (transactional outbox for the completion
 event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status).
 
 ## Key trade-offs

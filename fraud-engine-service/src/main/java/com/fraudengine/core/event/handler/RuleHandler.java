@@ -4,7 +4,6 @@ import com.fraudengine.core.config.ApplicationProperties;
 import com.fraudengine.core.exception.FraudEngineErrorMessages;
 import com.fraudengine.core.exception.UnsupportedTransactionTypeException;
 import com.fraudengine.core.event.domain.TransactionEvent;
-import com.fraudengine.core.metrics.MetricsRecorder;
 import com.fraudengine.core.persistence.repository.EvaluatedTransactionRepository;
 import com.fraudengine.core.persistence.repository.RuleHitRepository;
 import com.fraudengine.core.rule.FraudRule;
@@ -14,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
 
 @Slf4j
@@ -22,13 +20,9 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class RuleHandler {
 
-    private static final String METRIC_RULE_EVALUATED = "fraud.rule.evaluated";
-    private static final String METRIC_RULE_DURATION = "fraud.rule.duration";
-
     private final EvaluatedTransactionRepository evaluatedTransactionRepository;
     private final RuleHitRepository ruleHitRepository;
     private final ApplicationProperties applicationProperties;
-    private final MetricsRecorder metricsRecorder;
     private final CompletionHandler completionHandler;
 
     @Transactional
@@ -49,7 +43,7 @@ public class RuleHandler {
             return; // rule is not enabled
         }
 
-        RuleResult result = evaluate(event, rule);
+        RuleResult result = rule.evaluateRule(event);
 
         ruleHitRepository.upsert(
                 event.getTransactionId(),
@@ -59,10 +53,6 @@ public class RuleHandler {
                 result.riskLevel(),
                 Instant.now());
 
-        metricsRecorder.increment(METRIC_RULE_EVALUATED,
-                "rule", rule.ruleType().name(),
-                "flagged", String.valueOf(result.flagged()));
-
         completionHandler.checkCompletion(event);
     }
 
@@ -70,17 +60,6 @@ public class RuleHandler {
         ApplicationProperties.TransactionTypeConfig config = applicationProperties.getTransactionTypes().get(event.getTransactionType());
         if (config == null || config.getEnabledRules().isEmpty()) {
             throw new UnsupportedTransactionTypeException(FraudEngineErrorMessages.TRANSACTION_TYPE_NOT_SUPPORTED);
-        }
-    }
-
-    private RuleResult evaluate(final TransactionEvent event, final FraudRule rule) {
-        long start = System.nanoTime();
-        try {
-            return rule.evaluateRule(event);
-        } finally {
-            metricsRecorder.recordDuration(METRIC_RULE_DURATION,
-                    Duration.ofNanos(System.nanoTime() - start),
-                    "rule", rule.ruleType().name());
         }
     }
 }

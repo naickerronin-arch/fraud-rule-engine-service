@@ -4,7 +4,6 @@ import com.fraudengine.core.config.ApplicationProperties;
 import com.fraudengine.core.event.domain.FraudCheckCompleteEvent;
 import com.fraudengine.core.event.domain.RuleEvaluation;
 import com.fraudengine.core.event.domain.TransactionEvent;
-import com.fraudengine.core.metrics.MetricsRecorder;
 import com.fraudengine.core.outbox.OutboxWriter;
 import com.fraudengine.core.persistence.entity.EvaluatedTransaction;
 import com.fraudengine.core.persistence.entity.RuleHit;
@@ -17,8 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,14 +26,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CompletionHandler {
 
-    private static final String METRIC_FRAUD_CHECK_COMPLETE = "fraud.check.complete";
-
     private final EvaluatedTransactionRepository evaluatedTransactionRepository;
     private final RuleHitRepository ruleHitRepository;
     private final ApplicationProperties applicationProperties;
     private final RiskScoreCalculator riskScoreCalculator;
     private final OutboxWriter outboxWriter;
-    private final MetricsRecorder metricsRecorder;
     private final List<FraudRule> rules;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -66,7 +60,6 @@ public class CompletionHandler {
 
         FraudCheckCompleteEvent completeEvent = buildCompleteEvent(event, hits, flagged, weightedRiskScore);
         outboxWriter.publish(completeEvent);
-        recordAfterCommit(completeEvent);
     }
 
     private boolean isFlagged(final List<RuleHit> hits, final int weightedRiskScore) {
@@ -102,14 +95,5 @@ public class CompletionHandler {
                 .ruleEvaluations(ruleEvaluations)
                 .weightedRiskScore(weightedRiskScore)
                 .build();
-    }
-
-    private void recordAfterCommit(final FraudCheckCompleteEvent completeEvent) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                metricsRecorder.increment(METRIC_FRAUD_CHECK_COMPLETE, "flagged", String.valueOf(completeEvent.isFlagged()));
-            }
-        });
     }
 }
