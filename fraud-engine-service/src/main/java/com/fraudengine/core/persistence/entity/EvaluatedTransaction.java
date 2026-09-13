@@ -26,7 +26,5 @@ public class EvaluatedTransaction {
     private Instant createdAt;
     private Boolean flagged;
     private Boolean overriddenFlagged;
-    private String overriddenBy;
     private Instant overriddenAt;
-    private String overrideReason;
 }

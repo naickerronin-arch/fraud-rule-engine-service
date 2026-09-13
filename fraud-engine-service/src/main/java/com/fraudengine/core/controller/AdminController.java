@@ -4,6 +4,7 @@ import com.fraudengine.core.controller.model.BadLocationResponse;
 import com.fraudengine.core.controller.model.OverrideTransactionRequest;
 import com.fraudengine.core.controller.model.TransactionOverrideResponse;
 import com.fraudengine.core.service.AdminService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,7 +28,8 @@ public class AdminController implements AdminInterface {
     @Override
     @PostMapping("/transactions/{id}/override")
     public ResponseEntity<TransactionOverrideResponse> overrideTransaction(
-            @PathVariable("id") final String id, @RequestBody final OverrideTransactionRequest request) {
+            @PathVariable("id") final String id,
+            @Valid @RequestBody final OverrideTransactionRequest request) {
         return ResponseEntity.ok(adminService.overrideTransaction(id, request));
     }
 

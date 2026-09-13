@@ -25,13 +25,15 @@ public interface AdminInterface {
     @ApiResponses(
             value = {
                 @ApiResponse(responseCode = "200", description = "Successful operation"),
+                @ApiResponse(responseCode = "400", description = "Invalid request body"),
                 @ApiResponse(responseCode = "401", description = "Missing or invalid token"),
                 @ApiResponse(responseCode = "403", description = "Caller does not have the ComplianceTeam role"),
                 @ApiResponse(responseCode = "404", description = "Transaction not found"),
                 @ApiResponse(responseCode = "500", description = "Internal server error")
             })
     ResponseEntity<TransactionOverrideResponse> overrideTransaction(
-            @Parameter(description = "Transaction id") String id, @Valid OverrideTransactionRequest request);
+            @Parameter(description = "Transaction id") String id,
+            @Valid OverrideTransactionRequest request);
 
     @Operation(summary = "List bad locations", description = "Paginated list of bad locations")
     @ApiResponses(

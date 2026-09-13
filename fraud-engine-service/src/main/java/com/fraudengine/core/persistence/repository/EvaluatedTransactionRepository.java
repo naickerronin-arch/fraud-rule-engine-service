@@ -57,18 +57,14 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
             value = """
                 UPDATE evaluated_transactions
                 SET overridden_flagged = :overriddenFlagged,
-                    overridden_by = :overriddenBy,
-                    overridden_at = :overriddenAt,
-                    override_reason = :overrideReason
+                    overridden_at = :overriddenAt
                 WHERE id = :id
                 """,
             nativeQuery = true)
     void applyOverride(
             @Param("id") String id,
             @Param("overriddenFlagged") boolean overriddenFlagged,
-            @Param("overriddenBy") String overriddenBy,
-            @Param("overriddenAt") Instant overriddenAt,
-            @Param("overrideReason") String overrideReason);
+            @Param("overriddenAt") Instant overriddenAt);
 
     @Query(
             value = """

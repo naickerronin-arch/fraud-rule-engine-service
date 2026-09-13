@@ -33,15 +33,12 @@ public class AdminService {
                     .orElseThrow(() -> new TransactionNotFoundException(FraudEngineErrorMessages.TRANSACTION_NOT_FOUND));
 
             Instant overriddenAt = Instant.now();
-            evaluatedTransactionRepository.applyOverride(
-                    transactionId, request.isFlagged(), request.getActionedBy(), overriddenAt, request.getReason());
+            evaluatedTransactionRepository.applyOverride(transactionId, request.getFlagged(), overriddenAt);
 
             return TransactionOverrideResponse.builder()
                     .transactionId(transactionId)
-                    .overriddenFlagged(request.isFlagged())
-                    .overriddenBy(request.getActionedBy())
+                    .overriddenFlagged(request.getFlagged())
                     .overriddenAt(overriddenAt)
-                    .overrideReason(request.getReason())
                     .build();
         } catch (TransactionNotFoundException e) {
             throw e;

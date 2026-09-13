@@ -17,7 +17,5 @@ public class TransactionOverrideResponse {
 
     private String transactionId;
     private boolean overriddenFlagged;
-    private String overriddenBy;
     private Instant overriddenAt;
-    private String overrideReason;
 }
