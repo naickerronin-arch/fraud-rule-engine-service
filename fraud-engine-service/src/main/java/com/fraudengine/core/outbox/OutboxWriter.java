@@ -24,7 +24,7 @@ public class OutboxWriter {
     @Value("${environment}")
     private String environment;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.MANDATORY)
     public void publish(final FraudCheckCompleteEvent event) {
         try {
             String payload = objectMapper.writeValueAsString(event);

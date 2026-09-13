@@ -1,9 +1,11 @@
 package com.fraudengine.core.persistence.repository;
 
 import com.fraudengine.core.persistence.entity.EvaluatedTransaction;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 @Repository
 public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedTransaction, String> {
@@ -45,17 +48,8 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
             nativeQuery = true)
     long countEffectiveFlaggedByAreaCode(@Param("areaCode") String areaCode);
 
-    // A claim, not a plain update — "AND flagged IS NULL" makes this atomic across
-    // the 3 independent rule-consumers racing to detect completion for the same
-    // transaction. Exactly one concurrent caller affects 1 row (wins, should
-    // publish); every other caller affects 0 (lost, someone else already
-    // published) — removing the "may fire more than once" race entirely, rather
-    // than just narrowing its window.
-    @Modifying
-    @Query(
-            value = "UPDATE evaluated_transactions SET flagged = :flagged WHERE id = :id AND flagged IS NULL",
-            nativeQuery = true)
-    int claimCompletion(@Param("id") String id, @Param("flagged") boolean flagged);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<EvaluatedTransaction> findLockedById(String id);
 
     @Modifying
     @Query(

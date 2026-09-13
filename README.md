@@ -11,8 +11,7 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 
 - **`api-gateway`** — the only host-exposed entry point (`:8888`). Validates JWTs against
   Dex, derives a role (`FraudTeam` / `ComplianceTeam`) from the token's `aud` claim, and
-  routes to the two internal services. Circuit breaker (Resilience4j) protects the
-  gateway from a slow/struggling `fraud-engine-service`.
+  routes to the two internal services, with a 5s response timeout.
 - **`login-service`** — dev/demo convenience only, no host port of its own (reached through
   the gateway at `/dexLogin/**`). Wraps a password-grant call to Dex so grading doesn't
   require hand-rolling the token request.
@@ -25,7 +24,7 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 - **`kafka` / `kafka-init`** — single-broker KRaft cluster (no Zookeeper); `kafka-init` is a
   one-shot container that creates the transaction-created/DLT/fraud-check-complete topics
   before anything else starts.
-- **`redis`, `fraud-db` (Postgres)** — cache and primary datastore.
+- **`fraud-db` (Postgres)** — primary datastore.
 - **`prometheus`, `tempo`, `grafana`** — metrics, traces, and one dashboard UI over both.
 
 **Event flow:** transactions arrive on `${environment}-transaction-created` (6 partitions,
@@ -41,8 +40,13 @@ between the DB commit and the Kafka publish.
   window. Standalone-capable: confident enough on its own evidence to flag a transaction
   by itself.
 - **Behavioral deviation** — flags a transaction whose amount deviates from an account's
-  own historical baseline, with a cohort-level fallback baseline so new accounts aren't
-  unprotected from transaction #1. Also standalone-capable.
+  own historical baseline, with a cohort-level fallback baseline (same transaction type,
+  last 30 days) so new accounts aren't unprotected from transaction #1. The baseline
+  leaves out the transaction being checked and anything flagged as fraud. Also
+  standalone-capable.
+
+Rules only look at transactions up to the timestamp of the one being evaluated, so a rule
+that's behind the others doesn't count transactions that came after it.
 - **Location** — computes each area code's fraud rate live, on every transaction
   (`% of that area's transactions flagged`), with a minimum-transaction-count floor so a
   handful of transactions can't produce a statistically meaningless rate. **Corroboration-only,
@@ -76,9 +80,10 @@ scoring purposes, without destroying the original evidence of what the system co
 pass or fail, plus the system's own verdict and any human override), `rule_hits` (one row
 per transaction/rule, deliberately normalized over JSONB for queryability), `bad_locations`
 (a live, continuously-recomputed snapshot of each area code's current fraud-rate level, not
-a maker-checker workflow table), `bad_beneficiaries`, `dlt_audit_log` (forensic metadata for
-anything that failed deserialization/validation badly enough to reach the DLT), and
-`outbox_events` / `dead_letter` (transactional outbox for the completion event).
+a maker-checker workflow table), `dlt_audit_log` (forensic metadata for anything that
+failed deserialization/validation badly enough to reach the DLT, including which consumer
+group sent it), and `outbox_events` / `dead_letter` (transactional outbox for the completion
+event, published rows are deleted after 7 days).
 
 ## Key trade-offs
 
@@ -97,9 +102,12 @@ anything that failed deserialization/validation badly enough to reach the DLT), 
   run RF=3 with `min.insync.replicas=2`.
 - **Rate limiting dropped entirely.** Reconsidered once the caller set was reframed as
   internal-only (fraud/compliance tooling, not public traffic) — a small set of known,
-  trusted callers removes the threat rate limiting mainly defends against. The circuit
-  breaker was kept regardless, since its justification (resilience of the call chain) is
-  unrelated to caller trust.
+  trusted callers removes the threat rate limiting mainly defends against.
+- **No circuit breaker at the gateway, just timeouts.** Only the REST API goes through the
+  gateway (fraud detection itself runs over Kafka), the gateway is non-blocking, and traffic
+  from internal tooling is low, so a breaker added little over a plain response timeout.
+  Internal callers own their own retries and timeouts. Worth adding back if callers start
+  retrying hard against a struggling `fraud-engine-service`.
 - **No dedicated "recorder" consumer for the base transaction row.** Considered (would
   insert the base row exactly once instead of N racing rule-consumer attempts) and
   rejected — it introduces a real ordering race against the independent rule consumers,
@@ -108,13 +116,13 @@ anything that failed deserialization/validation badly enough to reach the DLT), 
   complete" is derived on read (comparing hit count to expected rule count) rather than
   stored as mutable state, so there's no completion flag that could silently fail to
   update.
-- **Fan-in completion publishing is claimed atomically, not just "usually fine."** With 3
+- **Fan-in completion is decided under a row lock, not just "usually fine."** With 3
   independent rule consumers racing to detect "am I last," a naive read-then-write could
-  let two of them both observe completion and both publish. Fixed with a conditional
-  `UPDATE ... WHERE flagged IS NULL` as an atomic claim — exactly one concurrent caller
-  ever affects a row and proceeds to publish; every other caller affects zero rows and
-  backs off. Same idempotent-claim idea as the `ON CONFLICT DO NOTHING` upserts above,
-  applied to a different kind of race.
+  let two of them both publish, or let two finishing at the same time each miss the other's
+  hit so nobody publishes. Each rule locks the transaction row (`SELECT ... FOR UPDATE`)
+  before counting hits, so whoever holds the lock sees every committed hit. The first rule
+  to find them all sets `flagged`; any rule after it sees `flagged` already set and backs
+  off. The verdict and the outbox row are written in the same database transaction.
 - **Location auto-tiers off any rule hit now, deliberately — but only because it lost
   standalone authority at the same time.** An earlier version of this design required
   human-confirmed fraud (not any rule hit) before auto-promoting a location, specifically

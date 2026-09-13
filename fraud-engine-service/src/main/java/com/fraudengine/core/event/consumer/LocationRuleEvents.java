@@ -3,6 +3,7 @@ package com.fraudengine.core.event.consumer;
 import com.fraudengine.core.event.domain.TransactionEvent;
 import com.fraudengine.core.event.handler.RuleHandler;
 import com.fraudengine.core.rule.strategy.LocationRule;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaHandler;
@@ -24,7 +25,7 @@ public class LocationRuleEvents {
 
     @KafkaHandler
     public void ruleExecute(
-            final TransactionEvent event,
+            @Payload @Valid final TransactionEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) final String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) final int partition,
             @Header(KafkaHeaders.OFFSET) final long offset) {
