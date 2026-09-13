@@ -38,6 +38,7 @@ public class OutboxRelayService {
         batch.forEach(event -> {
             try {
                 sendToKafka(event);
+                event.setStatus(OutboxStatus.PUBLISHED);
                 event.setPublishedAt(Instant.now());
                 outboxEventRepository.save(event);
                 log.trace("Successfully relayed event: id={}, topic={}", event.getId(), event.getTopic());
@@ -80,10 +81,16 @@ public class OutboxRelayService {
                 .payload(event.getPayload())
                 .lastError(e.getMessage())
                 .attemptCount(attemptCount)
+                .createdAt(event.getCreatedAt())
                 .movedAt(Instant.now())
                 .build();
 
         deadLetterRepository.save(deadLetter);
+
+        event.setAttemptCount(attemptCount);
+        event.setStatus(OutboxStatus.FAILED);
+        event.setLastError(e.getMessage());
+        outboxEventRepository.save(event);
 
         log.warn("Exhausted max attempts ({}) for event id={}, moved to dead letter",
                 outboxProperties.getMaxAttempts(), event.getId());

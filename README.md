@@ -83,7 +83,7 @@ per transaction/rule, deliberately normalized over JSONB for queryability), `bad
 a maker-checker workflow table), `dlt_audit_log` (forensic metadata for anything that
 failed deserialization/validation badly enough to reach the DLT, including which consumer
 group sent it), and `outbox_events` / `dead_letter` (transactional outbox for the completion
-event, published rows are deleted after 7 days).
+event, rows are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status).
 
 ## Key trade-offs
 

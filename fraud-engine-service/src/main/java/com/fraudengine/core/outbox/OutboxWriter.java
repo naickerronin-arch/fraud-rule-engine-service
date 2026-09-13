@@ -34,6 +34,7 @@ public class OutboxWriter {
                     .topic(environment + "-fraud-check-complete")
                     .partitionKey(event.getAccountNumber())
                     .payload(payload)
+                    .status(OutboxStatus.PENDING)
                     .createdAt(Instant.now())
                     .build();
             outboxEventRepository.save(outboxEvent);

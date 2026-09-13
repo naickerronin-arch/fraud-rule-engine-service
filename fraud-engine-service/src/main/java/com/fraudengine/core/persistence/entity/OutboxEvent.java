@@ -1,6 +1,9 @@
 package com.fraudengine.core.persistence.entity;
 
+import com.fraudengine.core.outbox.OutboxStatus;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -30,6 +33,8 @@ public class OutboxEvent {
     private String topic;
     private String partitionKey;
     private String payload;
+    @Enumerated(EnumType.STRING)
+    private OutboxStatus status;
     private Integer attemptCount;
     private String lastError;
     private Instant nextRetry;

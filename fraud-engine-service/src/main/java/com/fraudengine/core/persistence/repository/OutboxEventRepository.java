@@ -16,7 +16,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query(
             value = """
                 SELECT * FROM outbox_events
-                WHERE published_at IS NULL
+                WHERE status = 'PENDING'
                   AND (next_retry IS NULL OR next_retry <= now())
                 ORDER BY created_at
                 LIMIT :batchSize
