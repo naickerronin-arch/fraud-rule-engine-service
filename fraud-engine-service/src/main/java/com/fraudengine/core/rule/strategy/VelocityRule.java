@@ -37,7 +37,10 @@ public class VelocityRule implements FraudRule {
     public RuleResult evaluateRule(final TransactionEvent transactionEvent) {
         String accountNumber = transactionEvent.getAccountNumber();
 
+        // establish window start period based on config
         Instant windowStart = transactionEvent.getTimestamp().minus(Duration.ofMinutes(applicationProperties.getVelocityConfig().getWindowMinutes()));
+
+        // window counts within period
         long windowCount = evaluatedTransactionRepository.countByAccountNumberAndCreatedAtAfter(accountNumber, windowStart);
 
         double threshold = fetchBaseLine(applicationProperties.getVelocityConfig(), transactionEvent);
@@ -72,7 +75,8 @@ public class VelocityRule implements FraudRule {
         long allTransactions = evaluatedTransactionRepository.countByAccountNumber(accountNumber);
 
         if (allTransactions < velocityConfig.getMinHistoryCount()) {
-            return velocityConfig.getDefaultMaxTransactions();
+            log.trace("using default max transaction for baseLine for transaction {}", transaction.getTransactionId())
+            return velocityConfig.getDefaultMaxTransactions(); // default to config baseLine since not enough data is available
         }
 
         Instant transactionWindowStart = transaction.getTimestamp().minus(Duration.ofDays(velocityConfig.getTransactionWindow()));

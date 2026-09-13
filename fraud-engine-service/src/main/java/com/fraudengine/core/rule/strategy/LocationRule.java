@@ -19,7 +19,7 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class LocationRule implements FraudRule {
 
-    private final ApplicationProperties properties;
+    private final ApplicationProperties applicationProperties;
     private final BadLocationRepository badLocationRepository;
     private final EvaluatedTransactionRepository evaluatedTransactionRepository;
 
@@ -35,7 +35,7 @@ public class LocationRule implements FraudRule {
 
     @Override
     public boolean isEnabledFor(final String transactionType) {
-        ApplicationProperties.TransactionTypeConfig config = properties.getTransactionTypes().get(transactionType);
+        ApplicationProperties.TransactionTypeConfig config = applicationProperties.getTransactionTypes().get(transactionType);
         return config != null && config.getEnabledRules().contains(ruleType());
     }
 
@@ -43,6 +43,7 @@ public class LocationRule implements FraudRule {
     public RuleResult evaluateRule(final TransactionEvent transaction) {
         String areaCode = transaction.getAreaCode();
         if (areaCode == null || areaCode.isEmpty()) {
+            log.trace("missing data for transaction {}", transaction.getTransactionId());
             return RuleResult.builder()
                     .status(RuleHitStatus.SKIPPED_MISSING_DATA)
                     .flagged(false)
@@ -51,17 +52,18 @@ public class LocationRule implements FraudRule {
         }
 
         int level = computeLevel(areaCode);
+        log.trace("Level for area {} is :{}",transaction.getAreaCode(), level);
         badLocationRepository.upsertLevel(areaCode, level, Instant.now());
 
         return RuleResult.builder()
                 .status(RuleHitStatus.EVALUATED)
-                .flagged(level > 0)
+                .flagged(level > 0) // only flag
                 .riskLevel(riskLevelFor(level))
                 .build();
     }
 
     private int computeLevel(final String areaCode) {
-        ApplicationProperties.LocationConfig config = properties.getLocationConfig();
+        ApplicationProperties.LocationConfig config = applicationProperties.getLocationConfig();
 
         EvaluatedTransactionRepository.AreaStats stats = evaluatedTransactionRepository.findAreaStats(areaCode);
         long total = stats.getTotal();
@@ -85,7 +87,7 @@ public class LocationRule implements FraudRule {
     }
 
     private int riskLevelFor(final int level) {
-        ApplicationProperties.LocationConfig config = properties.getLocationConfig();
+        ApplicationProperties.LocationConfig config = applicationProperties.getLocationConfig();
         switch (level) {
             case 3:
                 return config.getLevelThreeRiskLevel();

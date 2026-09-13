@@ -28,7 +28,7 @@ public interface RuleHitRepository extends JpaRepository<RuleHit, Long> {
             @Param("status") String status,
             @Param("flagged") boolean flagged,
             @Param("riskLevel") int riskLevel,
-            @Param("evaluatedAt") Instant evaluatedAt);
+            @Param("evaluatedAt") Instant evaluatedAt); // ensure rule is only processed once
 
 
     long countByTransactionId(String transactionId);

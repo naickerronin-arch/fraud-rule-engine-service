@@ -37,20 +37,17 @@ public class CompletionHandler {
     public void checkCompletion(final TransactionEvent event) {
         ApplicationProperties.TransactionTypeConfig config =
                 applicationProperties.getTransactionTypes().get(event.getTransactionType());
-        if (config == null) {
-            return;
-        }
 
         EvaluatedTransaction transaction = evaluatedTransactionRepository
                 .findLockedById(event.getTransactionId())
-                .orElseThrow();
+                .orElseThrow(); // db locking operation to ensure rules dont race and fail to complete/ publish end event
         if (transaction.getFlagged() != null) {
             return; // already completed
         }
 
         List<RuleHit> hits = ruleHitRepository.findByTransactionId(event.getTransactionId());
         if (hits.size() < config.getEnabledRules().size()) {
-            return;
+            return; // not completed yet
         }
 
         int weightedRiskScore = riskScoreCalculator.calculateWeightedScore(hits);

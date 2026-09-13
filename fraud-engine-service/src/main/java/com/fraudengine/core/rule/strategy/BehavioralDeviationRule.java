@@ -34,23 +34,24 @@ public class BehavioralDeviationRule implements FraudRule {
 
     @Override
     public RuleResult evaluateRule(final TransactionEvent transaction) {
-        ApplicationProperties.BehavioralDeviationConfig config = properties.getBehavioralDeviationConfig();
+        ApplicationProperties.BehavioralDeviationConfig config = properties.getBehavioralDeviationConfig(); // config fetch
         String accountNumber = transaction.getAccountNumber();
 
         long lifetimeCount = evaluatedTransactionRepository.countByAccountNumber(accountNumber);
-        boolean baseLine = lifetimeCount >= config.getMinHistoryCount();
+        boolean baseLine = lifetimeCount >= config.getMinHistoryCount(); // ensure account has enough history for baseline
 
         EvaluatedTransactionRepository.AmountStats stats = baseLine
-                ? evaluatedTransactionRepository.findAmountStatsByAccountNumber(accountNumber, transaction.getTransactionId())
-                : evaluatedTransactionRepository.findAmountStatsByTransactionType(transaction.getTransactionType(), transaction.getTransactionId());
+                ? evaluatedTransactionRepository.findAmountStatsByAccountNumber(accountNumber, transaction.getTransactionId()) // baseline for account
+                : evaluatedTransactionRepository.findAmountStatsByTransactionType(transaction.getTransactionType(), transaction.getTransactionId()); // baseline for type of transaction as fallback
 
         if (stats == null || stats.getStdDevAmount() == null || stats.getStdDevAmount().signum() == 0) {
+            log.trace("Rule set to evaluated due to lack of data for transaction {}", transaction.getTransactionId());
             return RuleResult.builder()
                     .status(RuleHitStatus.EVALUATED)
                     .flagged(false)
                     .riskLevel(0)
                     .build();
-        }
+        } // fresh start problem, when no data is avaliable to establish any baseline stats
 
         BigDecimal deviation = transaction.getAmount().subtract(stats.getAvgAmount()).abs();
         double stdDevsFromMean = deviation.doubleValue() / stats.getStdDevAmount().doubleValue();

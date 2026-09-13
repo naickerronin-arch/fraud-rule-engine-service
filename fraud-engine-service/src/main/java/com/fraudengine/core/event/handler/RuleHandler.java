@@ -37,13 +37,13 @@ public class RuleHandler {
                 event.getAmount(),
                 event.getTransactionType(),
                 event.getAreaCode(),
-                event.getTimestamp());
+                event.getTimestamp());// idempotent upsert, sets the evaluated row for which ever consumer gets here first
 
         if (!rule.isEnabledFor(event.getTransactionType())) {
             return; // rule is not enabled
         }
 
-        RuleResult result = rule.evaluateRule(event);
+        RuleResult result = rule.evaluateRule(event);// strategy to evaluate the rule of the specific event
 
         ruleHitRepository.upsert(
                 event.getTransactionId(),

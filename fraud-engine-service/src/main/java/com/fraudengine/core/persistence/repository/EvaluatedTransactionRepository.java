@@ -38,6 +38,8 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
 
     long countByAccountNumber(String accountNumber);
 
+    long countByFlaggedIsNull();
+
     @Query(
             value = """
                 SELECT COUNT(*) AS total,
