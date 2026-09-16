@@ -3,7 +3,10 @@ package com.fraudengine.core.metrics;
 import com.fraudengine.core.controller.model.TransactionOverrideResponse;
 import com.fraudengine.core.event.domain.FraudCheckCompleteEvent;
 import com.fraudengine.core.rule.FraudRule;
+import com.fraudengine.core.rule.RuleHitStatus;
 import com.fraudengine.core.rule.RuleResult;
+import com.fraudengine.core.rule.RuleType;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -14,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
+import java.util.List;
 
 @Aspect
 @Component
@@ -28,6 +32,19 @@ public class FraudEngineMetricsAspect {
     private static final String STATUS_ERROR = "ERROR";
 
     private final MetricsRecorder metricsRecorder;
+
+    @PostConstruct
+    void registerCounters() {
+        for (String flagged : List.of("true", "false")) {
+            for (RuleType rule : RuleType.values()) {
+                metricsRecorder.register(METRIC_RULE_EVALUATED,
+                        "rule", rule.name(), "status", RuleHitStatus.EVALUATED.name(), "flagged", flagged);
+            }
+            metricsRecorder.register(METRIC_FRAUD_CHECK_COMPLETE, "flagged", flagged);
+            metricsRecorder.register(METRIC_TRANSACTION_OVERRIDE, "flagged", flagged);
+        }
+        metricsRecorder.register(METRIC_DLT_RECEIVED);
+    }
 
     @Around("execution(* com.fraudengine.core.rule.FraudRule+.evaluateRule(..)) && target(rule)")
     public Object recordRuleEvaluation(final ProceedingJoinPoint joinPoint, final FraudRule rule) throws Throwable {

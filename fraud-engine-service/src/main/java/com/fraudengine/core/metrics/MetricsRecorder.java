@@ -17,6 +17,11 @@ public class MetricsRecorder {
         Timer.builder(metricName).tags(tags).register(meterRegistry).record(duration);
     }
 
+    // creates the counter at zero, so Prometheus counts its first increment
+    public void register(final String name, final String... tags) {
+        meterRegistry.counter(name, tags);
+    }
+
     public void increment(final String name, final String... tags) {
         meterRegistry.counter(name, tags).increment();
     }

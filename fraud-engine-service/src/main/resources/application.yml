@@ -15,6 +15,10 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://fraud-db:5432/fraud}
     username: postgres
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      connection-timeout: 5000
+      leak-detection-threshold: 60000
   jpa:
     hibernate:
       ddl-auto: validate

@@ -234,17 +234,16 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "fraudCheckComplete rate (flagged vs clear)",
+      "title": "Fraud checks completed (last 5m, flagged vs clear)",
       "gridPos": { "x": 6, "y": 44, "w": 6, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "targets": [
         {
-          "expr": "sum by (flagged) (rate(fraud_check_complete_total[1m]))",
+          "expr": "sum by (flagged) (increase(fraud_check_complete_total[5m]))",
           "legendFormat": "flagged={{flagged}}",
           "refId": "A"
         }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
+      ]
     },
     {
       "id": 15,

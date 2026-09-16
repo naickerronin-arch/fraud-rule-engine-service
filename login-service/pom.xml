@@ -15,7 +15,7 @@
     <artifactId>login-service</artifactId>
     <version>0.1.0</version>
     <name>login-service</name>
-    <description>Dev/demo convenience only: exercises the Client Credentials grant against Dex so anyone grading or testing this can fetch a real token without hand-rolling a curl command.</description>
+    <description>Dev/demo convenience only: exercises the password grant against Dex so anyone grading or testing this can fetch a real token without hand-rolling a curl command.</description>
 
     <properties>
         <java.version>25</java.version>

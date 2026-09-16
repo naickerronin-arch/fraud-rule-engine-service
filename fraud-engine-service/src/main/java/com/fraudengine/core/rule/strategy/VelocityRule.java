@@ -75,7 +75,7 @@ public class VelocityRule implements FraudRule {
         long allTransactions = evaluatedTransactionRepository.countByAccountNumber(accountNumber);
 
         if (allTransactions < velocityConfig.getMinHistoryCount()) {
-            log.trace("using default max transaction for baseLine for transaction {}", transaction.getTransactionId())
+            log.trace("using default max transaction for baseLine for transaction {}", transaction.getTransactionId());
             return velocityConfig.getDefaultMaxTransactions(); // default to config baseLine since not enough data is available
         }
 

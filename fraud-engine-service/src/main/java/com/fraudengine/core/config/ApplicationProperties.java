@@ -20,7 +20,6 @@ import java.util.Map;
 public class ApplicationProperties {
 
     private int overallFlagThreshold = 50;
-    private JpaSettings jpaSettings = new JpaSettings();
     private KafkaSettings kafkaSettings = new KafkaSettings();
     private Map<String, TransactionTypeConfig> transactionTypes = new HashMap<>();
     private VelocityConfig velocityConfig = new VelocityConfig();
@@ -63,15 +62,6 @@ public class ApplicationProperties {
         private int minHistoryCount = 20;
         private double stdDevThreshold = 3;
         private double alertThreshold = 5.0;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class JpaSettings {
-        private String physicalNamingStrategy = "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy";
-        private String dialect = "org.hibernate.dialect.PostgreSQLDialect";
-        private Map<String, String> properties = new HashMap<>();
     }
 
     @Data

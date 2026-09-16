@@ -14,7 +14,7 @@
     <artifactId>api-gateway</artifactId>
     <version>0.1.0</version>
     <name>api-gateway</name>
-    <description>Sole host-exposed entry point: JWT validation against Dex, claims propagation, circuit breaking, routing to fraud-engine-service.</description>
+    <description>Sole host-exposed entry point: JWT validation against Dex, role checks, routing to fraud-engine-service and login-service.</description>
 
     <properties>
         <java.version>25</java.version>
@@ -70,11 +70,6 @@
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-spring-boot-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>net.logstash.logback</groupId>
-            <artifactId>logstash-logback-encoder</artifactId>
-            <version>7.4</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

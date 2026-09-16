@@ -169,8 +169,8 @@ and are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status)
   account that arrived after the one it's evaluating.
 - `fraud-engine-service`'s Prometheus metrics are reachable through the gateway without a token
   (`/fraud-service/actuator/prometheus`).
-- The database connection pool uses Hikari's default of 10 while 4 listeners run 6 consumers
-  each; set `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` per environment for real load.
+- The database connection pool defaults to 20 connections (`DB_POOL_SIZE`) for 24 consumer
+  threads plus the outbox relay and the API; size it to the real load per environment.
 - Both demo logins share one password, and wrong login credentials return `500` rather than `401`.
 
 ## Running locally
@@ -238,9 +238,8 @@ echo '{"transactionId":"txn-001","accountNumber":"ACC-1001","amount":250.00,"tim
 | `fraud_transactions_pending` | — | `BacklogMetrics` gauge, refreshed every 30s |
 | `fraud_outbox_events` | `status` | `BacklogMetrics` gauge, refreshed every 30s |
 
-Rule-hit and completion counters are created on first use, so with very little test traffic a
-`rate()` panel can look empty until a series has changed at least once — query the raw counter
-in Grafana Explore to check.
+The counters are registered at zero on startup, so `rate()` / `increase()` panels count the very
+first event. Error-status and skipped rule series are still created on first use.
 
 ## Testing
 
