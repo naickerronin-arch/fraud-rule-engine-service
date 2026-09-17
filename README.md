@@ -244,7 +244,7 @@ first event. Error-status and skipped rule series are still created on first use
 ## Testing
 
 `fraud-engine-service` has unit tests (JUnit 5, Mockito, AssertJ — no Spring context, database
-or Kafka) covering the rule maths, the risk score, rule handling and completion, the outbox
+or Kafka), covering the rule maths, the risk score, rule handling and completion, the outbox
 writer and relay, the metrics aspect and backlog gauges, and the REST controllers' status codes
 and validation.
 

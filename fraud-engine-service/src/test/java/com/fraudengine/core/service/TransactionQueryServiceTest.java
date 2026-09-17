@@ -1,5 +1,9 @@
 package com.fraudengine.core.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.fraudengine.core.controller.model.EvaluatedTransactionResponse;
 import com.fraudengine.core.controller.model.TransactionDetailResponse;
 import com.fraudengine.core.persistence.entity.EvaluatedTransaction;
@@ -8,84 +12,113 @@ import com.fraudengine.core.persistence.repository.EvaluatedTransactionRepositor
 import com.fraudengine.core.persistence.repository.RuleHitRepository;
 import com.fraudengine.core.rule.RuleHitStatus;
 import com.fraudengine.core.rule.RuleType;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
+@ExtendWith(MockitoExtension.class)
 class TransactionQueryServiceTest {
 
-    private final Pageable pageable = PageRequest.of(0, 20);
+    private static final Pageable PAGEABLE = PageRequest.of(0, 20);
+    private static final String TRANSACTION_ID = "txn-1";
 
+    @Mock
     private EvaluatedTransactionRepository evaluatedTransactionRepository;
+
+    @Mock
     private RuleHitRepository ruleHitRepository;
+
     private TransactionQueryService service;
 
     @BeforeEach
     void setUp() {
-        evaluatedTransactionRepository = mock(EvaluatedTransactionRepository.class);
-        ruleHitRepository = mock(RuleHitRepository.class);
         service = new TransactionQueryService(evaluatedTransactionRepository, ruleHitRepository);
-        when(evaluatedTransactionRepository.search(any(), any(), any(), any())).thenReturn(Page.empty());
+    }
+
+    // ========== list() Filter Tests ==========
+
+    @Test
+    void shouldFilterOnTheFlaggedColumn_whenTheStatusIsFlagged() {
+        when(evaluatedTransactionRepository.search("ACC-1", "VELOCITY", Boolean.TRUE, PAGEABLE)).thenReturn(Page.empty());
+
+        service.list("ACC-1", "VELOCITY", "flagged", PAGEABLE);
+
+        verify(evaluatedTransactionRepository).search("ACC-1", "VELOCITY", Boolean.TRUE, PAGEABLE);
     }
 
     @Test
-    void filtersFlaggedTransactions() {
-        service.list("ACC-1", "VELOCITY", "flagged", pageable);
+    void shouldFilterOnTheFlaggedColumn_whenTheStatusIsClear() {
+        when(evaluatedTransactionRepository.search(null, null, Boolean.FALSE, PAGEABLE)).thenReturn(Page.empty());
 
-        verify(evaluatedTransactionRepository).search("ACC-1", "VELOCITY", Boolean.TRUE, pageable);
+        service.list(null, null, "CLEAR", PAGEABLE);
+
+        verify(evaluatedTransactionRepository).search(null, null, Boolean.FALSE, PAGEABLE);
     }
 
+    // PENDING isn't something the query can filter on, so it has to fall through as "no filter"
     @Test
-    void filtersClearTransactions() {
-        service.list(null, null, "CLEAR", pageable);
+    void shouldNotFilter_whenTheStatusIsNotOneItCanQuery() {
+        when(evaluatedTransactionRepository.search(null, null, null, PAGEABLE)).thenReturn(Page.empty());
 
-        verify(evaluatedTransactionRepository).search(null, null, Boolean.FALSE, pageable);
+        service.list(null, null, "PENDING", PAGEABLE);
+
+        verify(evaluatedTransactionRepository).search(null, null, null, PAGEABLE);
     }
 
-    @Test
-    void returnsTheEffectiveStatusOfEachTransaction() {
-        EvaluatedTransaction flagged = transaction("txn-1", true, null);
-        EvaluatedTransaction overriddenToClear = transaction("txn-2", true, false);
-        EvaluatedTransaction pending = transaction("txn-3", null, null);
-        when(evaluatedTransactionRepository.search(null, null, null, pageable))
-                .thenReturn(new PageImpl<>(List.of(flagged, overriddenToClear, pending)));
+    // ========== Effective Status Tests ==========
 
-        List<EvaluatedTransactionResponse> responses = service.list(null, null, null, pageable).getContent();
+    @Test
+    void shouldReportTheEffectiveStatus_whenTransactionsHaveVerdictsAndOverrides() {
+        when(evaluatedTransactionRepository.search(null, null, null, PAGEABLE)).thenReturn(new PageImpl<>(List.of(
+                transaction("txn-1", true, null),
+                transaction("txn-2", true, false),
+                transaction("txn-3", false, true),
+                transaction("txn-4", null, null))));
+
+        List<EvaluatedTransactionResponse> responses = service.list(null, null, null, PAGEABLE).getContent();
 
         assertThat(responses).extracting(EvaluatedTransactionResponse::getStatus)
-                .containsExactly("FLAGGED", "CLEAR", "PENDING");
-        assertThat(responses.get(1).getFlagged()).isTrue();
-        assertThat(responses.get(1).getOverriddenFlagged()).isFalse();
+                .containsExactly("FLAGGED", "CLEAR", "FLAGGED", "PENDING");
     }
 
+    // both verdicts are returned, so a caller can see the system was overruled
     @Test
-    void returnsTheTransactionWithItsRuleHits() {
-        when(evaluatedTransactionRepository.findById("txn-1")).thenReturn(Optional.of(transaction("txn-1", false, null)));
-        RuleHit hit = new RuleHit();
-        hit.setRuleType(RuleType.VELOCITY);
-        hit.setStatus(RuleHitStatus.EVALUATED);
-        hit.setRiskLevel(50);
-        when(ruleHitRepository.findByTransactionId("txn-1")).thenReturn(List.of(hit));
+    void shouldKeepBothVerdicts_whenATransactionWasOverridden() {
+        when(evaluatedTransactionRepository.search(null, null, null, PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(transaction(TRANSACTION_ID, true, false))));
 
-        TransactionDetailResponse detail = service.get("txn-1");
+        EvaluatedTransactionResponse response = service.list(null, null, null, PAGEABLE).getContent().get(0);
+
+        assertThat(response.getStatus()).isEqualTo("CLEAR");
+        assertThat(response.getFlagged()).isTrue();
+        assertThat(response.getOverriddenFlagged()).isFalse();
+    }
+
+    // ========== get() Tests ==========
+
+    @Test
+    void shouldReturnTheTransactionWithItsRuleHits_whenItExists() {
+        when(evaluatedTransactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction(TRANSACTION_ID, false, null)));
+        when(ruleHitRepository.findByTransactionId(TRANSACTION_ID)).thenReturn(List.of(hit()));
+
+        TransactionDetailResponse detail = service.get(TRANSACTION_ID);
 
         assertThat(detail.getTransaction().getStatus()).isEqualTo("CLEAR");
         assertThat(detail.getRuleHits()).hasSize(1);
         assertThat(detail.getRuleHits().get(0).getRuleType()).isEqualTo("VELOCITY");
         assertThat(detail.getRuleHits().get(0).getRiskLevel()).isEqualTo(50);
     }
+
+    // ========== Helper Methods ==========
 
     private static EvaluatedTransaction transaction(final String id, final Boolean flagged, final Boolean overriddenFlagged) {
         EvaluatedTransaction transaction = new EvaluatedTransaction();
@@ -95,5 +128,13 @@ class TransactionQueryServiceTest {
         transaction.setFlagged(flagged);
         transaction.setOverriddenFlagged(overriddenFlagged);
         return transaction;
+    }
+
+    private static RuleHit hit() {
+        RuleHit hit = new RuleHit();
+        hit.setRuleType(RuleType.VELOCITY);
+        hit.setStatus(RuleHitStatus.EVALUATED);
+        hit.setRiskLevel(50);
+        return hit;
     }
 }
