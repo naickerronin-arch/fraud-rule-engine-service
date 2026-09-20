@@ -30,7 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RuleHandlerTest {
 
     private static final String ACCOUNT_NUMBER = "ACC-1";
-    private static final String AREA_CODE = "JHB-001";
+    private static final String AREA_CODE = "2196";
     private static final String TRANSACTION_ID = "txn-1";
     private static final Instant NOW = Instant.parse("2026-01-01T12:00:00Z");
 

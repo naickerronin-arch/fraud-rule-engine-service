@@ -24,7 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class LocationRuleTest {
 
-    private static final String AREA_CODE = "JHB-001";
+    private static final String AREA_CODE = "2196";
 
     @Mock
     private BadLocationRepository badLocationRepository;

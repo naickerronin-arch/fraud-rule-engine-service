@@ -25,6 +25,8 @@ import java.time.Instant;
         })
 public class DltAuditListener {
 
+    private static final int MAX_MESSAGE_LENGTH = 1000; // exception_message is VARCHAR(1000)
+
     private final DltAuditLogRepository dltAuditLogRepository;
 
     @KafkaHandler
@@ -44,10 +46,17 @@ public class DltAuditListener {
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
                 .exceptionClass(exceptionClass)
-                .exceptionMessage(exceptionMessage)
+                .exceptionMessage(truncate(exceptionMessage))
                 .rawPayload(payload)
                 .receivedAt(Instant.now())
                 .build();
         dltAuditLogRepository.save(entry);
+    }
+    
+    private static String truncate(final String message) {
+        if (message == null || message.length() <= MAX_MESSAGE_LENGTH) {
+            return message;
+        }
+        return message.substring(0, MAX_MESSAGE_LENGTH);
     }
 }

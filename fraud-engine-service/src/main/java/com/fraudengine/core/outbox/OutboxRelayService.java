@@ -25,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OutboxRelayService {
 
+    private static final int MAX_ERROR_LENGTH = 1000;
+
     private final OutboxEventRepository outboxEventRepository;
     private final DeadLetterRepository deadLetterRepository;
     private final KafkaTemplate<Object, Object> kafkaTemplate;
@@ -79,7 +81,7 @@ public class OutboxRelayService {
                 .topic(event.getTopic())
                 .partitionKey(event.getPartitionKey())
                 .payload(event.getPayload())
-                .lastError(e.getMessage())
+                .lastError(truncate(e.getMessage()))
                 .attemptCount(attemptCount)
                 .createdAt(event.getCreatedAt())
                 .movedAt(Instant.now())
@@ -89,17 +91,24 @@ public class OutboxRelayService {
 
         event.setAttemptCount(attemptCount);
         event.setStatus(OutboxStatus.FAILED);
-        event.setLastError(e.getMessage());
+        event.setLastError(truncate(e.getMessage()));
         outboxEventRepository.save(event);
 
         log.warn("Exhausted max attempts ({}) for event id={}, moved to dead letter",
                 outboxProperties.getMaxAttempts(), event.getId());
     }
 
+    private static String truncate(final String message) {
+        if (message == null || message.length() <= MAX_ERROR_LENGTH) {
+            return message;
+        }
+        return message.substring(0, MAX_ERROR_LENGTH);
+    }
+
     private void backoffEvent(final OutboxEvent event, final Exception e, final int nextAttempt) {
         long backoffSeconds = Math.min(nextAttempt, 30L);
         event.setAttemptCount(nextAttempt);
-        event.setLastError(e.getMessage());
+        event.setLastError(truncate(e.getMessage()));
         event.setNextRetry(Instant.now().plus(backoffSeconds, ChronoUnit.SECONDS));
         outboxEventRepository.save(event);
     }

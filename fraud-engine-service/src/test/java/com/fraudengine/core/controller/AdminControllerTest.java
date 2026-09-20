@@ -86,11 +86,11 @@ class AdminControllerTest {
     @Test
     void shouldSortByNewestFirst_whenListingBadLocations() throws Exception {
         when(adminService.listBadLocations(any()))
-                .thenReturn(new PageImpl<>(List.of(location("JHB-001", 2)), PageRequest.of(0, 20), 1));
+                .thenReturn(new PageImpl<>(List.of(location("2196", 2)), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/admin/locations"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].areaCode").value("JHB-001"))
+                .andExpect(jsonPath("$.content[0].areaCode").value("2196"))
                 .andExpect(jsonPath("$.content[0].level").value(2));
 
         verify(adminService).listBadLocations(PageRequest.of(0, 20, Sort.by("createdAt").descending()));
