@@ -10,6 +10,7 @@ import com.fraudengine.core.rule.RuleHitStatus;
 import com.fraudengine.core.rule.RuleResult;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -98,11 +99,20 @@ class VelocityRuleTest {
     // ========== fetchBaseLine() Tests ==========
 
     @Test
-    void shouldRaiseTheThreshold_whenTheAccountHasEnoughHistoryToBeBusy() {
-        when(evaluatedTransactionRepository.countByAccountNumber(ACCOUNT_NUMBER)).thenReturn(100L);
-        when(evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(ACCOUNT_NUMBER, BASELINE_START))
-                .thenReturn(21600L);
+    void shouldRaiseTheThreshold_whenTheAccountIsNormallyBusy() {
+        givenHistoryWithBusiestWindow(10);
         givenTransactionsInWindow(15);
+
+        RuleResult result = rule.evaluateRule(testEvent);
+
+        assertThat(result.flagged()).isFalse();
+        assertThat(result.riskLevel()).isEqualTo(50);
+    }
+
+    @Test
+    void shouldKeepTheDefaultThreshold_whenTheAccountIsNormallyQuiet() {
+        givenHistoryWithBusiestWindow(1);
+        givenTransactionsInWindow(5);
 
         RuleResult result = rule.evaluateRule(testEvent);
 
@@ -112,8 +122,14 @@ class VelocityRuleTest {
 
     // ========== Helper Methods ==========
 
+    private void givenHistoryWithBusiestWindow(final long busiestWindow) {
+        when(evaluatedTransactionRepository.countByAccountNumber(ACCOUNT_NUMBER)).thenReturn(100L);
+        when(evaluatedTransactionRepository.findBusiestWindowCount(ACCOUNT_NUMBER, BASELINE_START, WINDOW_START, 10))
+                .thenReturn(Optional.of(busiestWindow));
+    }
+
     private void givenTransactionsInWindow(final long count) {
-        when(evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(ACCOUNT_NUMBER, WINDOW_START))
+        when(evaluatedTransactionRepository.countInWindow(ACCOUNT_NUMBER, WINDOW_START, NOW))
                 .thenReturn(count);
     }
 }

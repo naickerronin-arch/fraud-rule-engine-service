@@ -74,7 +74,7 @@ app:
     default-max-transactions: 5
     min-history-count: 20
     transaction-window: 30
-    multiplier: 3
+    multiplier: 1.5
     alert-threshold: 2.0
   location-config:
     weight: 0.3

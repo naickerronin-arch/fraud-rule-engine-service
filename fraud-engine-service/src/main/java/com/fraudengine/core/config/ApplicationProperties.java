@@ -43,7 +43,7 @@ public class ApplicationProperties {
         private int defaultMaxTransactions = 5;
         private int minHistoryCount = 20;
         private int transactionWindow = 30;
-        private double multiplier = 3;
+        private double multiplier = 1.5;
         private double alertThreshold = 2.0; // if rule violates twice the norm, the warn for fraud
     }
 

@@ -35,7 +35,30 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
             @Param("areaCode") String areaCode,
             @Param("eventTime") Instant eventTime);
 
-    long countByAccountNumberAndEventTimeAfter(String accountNumber, Instant since);
+    // capped at the transaction being judged, so a rule that falls behind doesn't count what came after it
+    @Query("""
+            SELECT COUNT(t) FROM EvaluatedTransaction t
+            WHERE t.accountNumber = :accountNumber
+              AND t.eventTime > :from
+              AND t.eventTime <= :to
+            """)
+    long countInWindow(@Param("accountNumber") String accountNumber, @Param("from") Instant from, @Param("to") Instant to);
+
+    @Query(
+            value = """
+                SELECT count(*)
+                FROM evaluated_transactions
+                WHERE account_id = :accountNumber
+                  AND event_time > :from
+                  AND event_time <= :to
+                GROUP BY date_bin(:windowMinutes * interval '1 minute', event_time, timestamp '2000-01-01')
+                HAVING count(*) FILTER (WHERE COALESCE(overridden_flagged, flagged)) = 0
+                ORDER BY count(*) DESC
+                LIMIT 1
+                """,
+            nativeQuery = true)
+    Optional<Long> findBusiestWindowCount(@Param("accountNumber") String accountNumber, @Param("from") Instant from,
+                                          @Param("to") Instant to, @Param("windowMinutes") int windowMinutes);
 
     long countByAccountNumber(String accountNumber);
 

@@ -41,9 +41,9 @@ public class VelocityRule implements FraudRule {
         Instant windowStart = transactionEvent.getTimestamp().minus(Duration.ofMinutes(applicationProperties.getVelocityConfig().getWindowMinutes()));
 
         // window counts within period
-        long windowCount = evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(accountNumber, windowStart);
+        long windowCount = evaluatedTransactionRepository.countInWindow(accountNumber, windowStart, transactionEvent.getTimestamp());
 
-        double threshold = fetchBaseLine(applicationProperties.getVelocityConfig(), transactionEvent);
+        double threshold = fetchBaseLine(applicationProperties.getVelocityConfig(), transactionEvent, windowStart);
         double alertThreshold = threshold * applicationProperties.getVelocityConfig().getAlertThreshold();
 
         boolean meetsConfidenceThreshold = windowCount >= alertThreshold;
@@ -68,7 +68,8 @@ public class VelocityRule implements FraudRule {
     }
 
 
-    private double fetchBaseLine(final ApplicationProperties.VelocityConfig velocityConfig, final TransactionEvent transaction) {
+    private double fetchBaseLine(final ApplicationProperties.VelocityConfig velocityConfig, final TransactionEvent transaction,
+                                 final Instant windowStart) {
 
         String accountNumber = transaction.getAccountNumber();
 
@@ -79,13 +80,12 @@ public class VelocityRule implements FraudRule {
             return velocityConfig.getDefaultMaxTransactions(); // default to config baseLine since not enough data is available
         }
 
-        Instant transactionWindowStart = transaction.getTimestamp().minus(Duration.ofDays(velocityConfig.getTransactionWindow()));
-        long totalTransactionsInPeriod = evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(accountNumber, transactionWindowStart);
+        // history stops where the current window starts, so a burst can't raise its own threshold
+        Instant periodStart = transaction.getTimestamp().minus(Duration.ofDays(velocityConfig.getTransactionWindow()));
+        long busiestWindow = evaluatedTransactionRepository
+                .findBusiestWindowCount(accountNumber, periodStart, windowStart, velocityConfig.getWindowMinutes())
+                .orElse(0L);
 
-        long windowsInPeriod= Duration.ofDays(velocityConfig.getTransactionWindow()).toMinutes()
-                / velocityConfig.getWindowMinutes();
-        double averageTransactions = (double) totalTransactionsInPeriod / windowsInPeriod;
-
-        return Math.max(velocityConfig.getDefaultMaxTransactions(), averageTransactions * velocityConfig.getMultiplier());
+        return Math.max(velocityConfig.getDefaultMaxTransactions(), busiestWindow * velocityConfig.getMultiplier());
     }
 }
