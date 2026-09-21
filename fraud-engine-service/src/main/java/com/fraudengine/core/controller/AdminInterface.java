@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -39,9 +41,11 @@ public interface AdminInterface {
     @ApiResponses(
             value = {
                 @ApiResponse(responseCode = "200", description = "Successful operation"),
+                @ApiResponse(responseCode = "400", description = "Page below 0, or size outside 1 to 100"),
                 @ApiResponse(responseCode = "401", description = "Missing or invalid token"),
                 @ApiResponse(responseCode = "500", description = "Internal server error")
             })
     ResponseEntity<Page<BadLocationResponse>> listBadLocations(
-            @Parameter(description = "Page index") int page, @Parameter(description = "Page size") int size);
+            @Parameter(description = "Page index") @Min(0) int page,
+            @Parameter(description = "Page size, 1 to 100") @Min(1) @Max(100) int size);
 }

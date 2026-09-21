@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(final ConstraintViolationException ex) {
         var fieldErrors = ex.getConstraintViolations().stream()
-                .map(violation -> new FieldError(violation.getPropertyPath().toString(), violation.getMessage()))
+                .map(violation -> new FieldError(parameterName(violation.getPropertyPath().toString()), violation.getMessage()))
                 .toList();
 
         ErrorResponse errorResponse = new ErrorResponse(ErrorResponseType.FIELD_ERROR, fieldErrors);
@@ -84,6 +84,11 @@ public class GlobalExceptionHandler {
         var response = new GenericExceptionResponse(error.getCode(), error.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(ErrorResponseType.SERVICE_ERROR, List.of(response)));
+    }
+
+    // the path is "list.size": the Java method name means nothing to the caller
+    private static String parameterName(final String propertyPath) {
+        return propertyPath.substring(propertyPath.lastIndexOf('.') + 1);
     }
 
     private ResponseEntity<ErrorResponse> buildFraudEngineError(final FraudEngineException ex, final HttpStatus status) {

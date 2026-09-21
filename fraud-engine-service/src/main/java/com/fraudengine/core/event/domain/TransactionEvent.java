@@ -1,7 +1,10 @@
 package com.fraudengine.core.event.domain;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -14,15 +17,18 @@ import java.time.Instant;
 @NoArgsConstructor
 public class TransactionEvent {
 
-    @NotNull
+    @NotBlank
+    @Size(max = 64)
     private String transactionId;
-    @NotNull
+    @NotBlank
+    @Size(max = 64)
     private String accountNumber;
     @NotNull
+    @Positive
     private BigDecimal amount;
     @NotNull
     private Instant timestamp;
-    @NotNull
+    @NotBlank
     private String transactionType;
 
     private String beneficiaryAccountNumber;
