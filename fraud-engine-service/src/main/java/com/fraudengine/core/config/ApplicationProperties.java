@@ -21,6 +21,7 @@ public class ApplicationProperties {
 
     private int overallFlagThreshold = 50;
     private KafkaSettings kafkaSettings = new KafkaSettings();
+    private PendingEvaluationConfig pendingEvaluation = new PendingEvaluationConfig();
     private Map<String, TransactionTypeConfig> transactionTypes = new HashMap<>();
     private VelocityConfig velocityConfig = new VelocityConfig();
     private LocationConfig locationConfig = new LocationConfig();
@@ -62,6 +63,12 @@ public class ApplicationProperties {
         private int minHistoryCount = 20;
         private double stdDevThreshold = 3;
         private double alertThreshold = 5.0;
+    }
+
+    @Data
+    public static class PendingEvaluationConfig {
+        private int abandonAfterMinutes = 5; // comfortably past the retry ladder and normal consumer lag
+        private int batchSize = 50;
     }
 
     @Data

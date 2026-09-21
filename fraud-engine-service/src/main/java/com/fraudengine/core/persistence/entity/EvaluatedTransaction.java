@@ -23,8 +23,10 @@ public class EvaluatedTransaction {
     private BigDecimal amount;
     private String transactionType;
     private String areaCode;
+    private Instant eventTime;
     private Instant createdAt;
     private Boolean flagged;
     private Boolean overriddenFlagged;
     private Instant overriddenAt;
+    private Instant abandonedAt;
 }

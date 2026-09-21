@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fraudengine.core.controller.model.OverrideTransactionRequest;
 import com.fraudengine.core.event.consumer.DltAuditListener;
 import com.fraudengine.core.event.domain.FraudCheckCompleteEvent;
+import com.fraudengine.core.event.domain.FraudCheckFailedEvent;
 import com.fraudengine.core.event.domain.TransactionEvent;
 import com.fraudengine.core.outbox.OutboxWriter;
 import com.fraudengine.core.persistence.entity.EvaluatedTransaction;
@@ -63,6 +64,7 @@ class FraudEngineMetricsAspectTest {
         assertThat(counter("fraud.transaction.override", "flagged", "true")).isZero();
         assertThat(meterRegistry.get("fraud.dlt.received").counter().count()).isZero();
         assertThat(meterRegistry.find("fraud.rule.evaluated").counters()).hasSize(6);
+        assertThat(counter("fraud.check.failed", "reason", "RULES_DID_NOT_REPORT")).isZero();
     }
 
     // ========== recordRuleEvaluation() Tests ==========
@@ -112,6 +114,28 @@ class FraudEngineMetricsAspectTest {
         assertThat(counter("fraud.check.complete", "flagged", "true")).isEqualTo(1.0);
     }
 
+    // ========== recordFraudCheckFailed() Tests ==========
+
+    @Test
+    void shouldCountTheFailure_onlyAfterTheTransactionCommits() {
+        OutboxWriter outboxWriter = proxy(
+                new OutboxWriter(mock(OutboxEventRepository.class), new ObjectMapper().findAndRegisterModules()));
+        FraudCheckFailedEvent event = FraudCheckFailedEvent.builder()
+                .transactionId("txn-1")
+                .reason("RULES_DID_NOT_REPORT")
+                .failedAt(Instant.now())
+                .build();
+        TransactionSynchronizationManager.initSynchronization();
+
+        outboxWriter.publish(event);
+
+        assertThat(meterRegistry.find("fraud.check.failed").counter()).isNull();
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(counter("fraud.check.failed", "reason", "RULES_DID_NOT_REPORT")).isEqualTo(1.0);
+    }
+
     // ========== recordOverride() Tests ==========
 
     @Test
@@ -131,7 +155,7 @@ class FraudEngineMetricsAspectTest {
     void shouldCountTheDeadLetter_whenTheAuditListenerHandlesOne() {
         DltAuditListener listener = proxy(new DltAuditListener(mock(DltAuditLogRepository.class)));
 
-        listener.handle("{}", "local-transaction-created", 0, 1L, "SomeException", "failed");
+        listener.handle("{}", "local-transaction-created", 0, 1L, "fraud-velocity-rule", "SomeException", null, "failed");
 
         assertThat(meterRegistry.get("fraud.dlt.received").counter().count()).isEqualTo(1.0);
     }

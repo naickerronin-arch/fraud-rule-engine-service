@@ -25,6 +25,18 @@ services:
       dex:
         condition: service_started
 
+  demo-service:
+    build:
+      context: ./demo-service
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FRAUD_ENGINE_URL: http://fraud-engine-service:8081/fraud-service
+      GATEWAY_EXTERNAL_URL: ${GATEWAY_EXTERNAL_URL:-http://localhost:8888}
+    depends_on:
+      fraud-engine-service:
+        condition: service_healthy
+
   dex:
     image: dexidp/dex:latest-alpine
     command: [ "dex", "serve", "/etc/dex/config.yaml" ]
@@ -46,6 +58,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local
       ENVIRONMENT: ${ENVIRONMENT:-local}
+      ABANDON_AFTER_MINUTES: ${ABANDON_AFTER_MINUTES:-5}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATASOURCE_URL: jdbc:postgresql://fraud-db:5432/fraud
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -100,7 +113,9 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists
         --topic ${ENVIRONMENT:-local}-transaction-created-dlt --partitions 6 --replication-factor 1;
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists
-        --topic ${ENVIRONMENT:-local}-fraud-check-complete --partitions 6 --replication-factor 1
+        --topic ${ENVIRONMENT:-local}-fraud-check-complete --partitions 6 --replication-factor 1;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists
+        --topic ${ENVIRONMENT:-local}-fraud-check-failed --partitions 6 --replication-factor 1
 
   prometheus:
     image: prom/prometheus:latest

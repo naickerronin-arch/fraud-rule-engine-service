@@ -36,7 +36,7 @@ public class AdminController implements AdminInterface {
     @Override
     @GetMapping("/locations")
     public ResponseEntity<Page<BadLocationResponse>> listBadLocations(@RequestParam(defaultValue = "0") final int page,
-                                                     @RequestParam(defaultValue = "20") final int size) {
+                                                                      @RequestParam(defaultValue = "20") final int size) {
         return ResponseEntity.ok(adminService.listBadLocations(PageRequest.of(page, size, Sort.by("createdAt").descending())));
     }
 }

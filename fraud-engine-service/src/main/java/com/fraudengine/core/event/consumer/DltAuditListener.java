@@ -35,24 +35,28 @@ public class DltAuditListener {
             @Header(value = KafkaHeaders.DLT_ORIGINAL_TOPIC, required = false) final String originalTopic,
             @Header(value = KafkaHeaders.DLT_ORIGINAL_PARTITION, required = false) final Integer originalPartition,
             @Header(value = KafkaHeaders.DLT_ORIGINAL_OFFSET, required = false) final Long originalOffset,
+            @Header(value = KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP, required = false) final String originalConsumerGroup,
             @Header(value = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) final String exceptionClass,
+            @Header(value = KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN, required = false) final String exceptionCauseClass,
             @Header(value = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) final String exceptionMessage) {
 
-        log.warn("Recording DLT entry — originalTopic={} originalPartition={} originalOffset={} exceptionClass={} exceptionMessage={}",
-                originalTopic, originalPartition, originalOffset, exceptionClass, exceptionMessage);
+        log.warn("Recording DLT entry — consumerGroup={} originalTopic={} originalPartition={} originalOffset={} exceptionClass={} exceptionMessage={}",
+                originalConsumerGroup, originalTopic, originalPartition, originalOffset, exceptionClass, exceptionMessage);
 
         DltAuditLog entry = DltAuditLog.builder()
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
+                .originalConsumerGroup(originalConsumerGroup)
                 .exceptionClass(exceptionClass)
+                .exceptionCauseClass(exceptionCauseClass)
                 .exceptionMessage(truncate(exceptionMessage))
                 .rawPayload(payload)
                 .receivedAt(Instant.now())
                 .build();
         dltAuditLogRepository.save(entry);
     }
-    
+
     private static String truncate(final String message) {
         if (message == null || message.length() <= MAX_MESSAGE_LENGTH) {
             return message;

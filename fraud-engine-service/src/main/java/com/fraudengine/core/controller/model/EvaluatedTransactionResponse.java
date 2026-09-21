@@ -21,7 +21,7 @@ public class EvaluatedTransactionResponse {
     private BigDecimal amount;
     private String transactionType;
     private String areaCode;
-    private Instant createdAt;
+    private Instant eventTime;
     private String status; // FLAGGED, CLEAR or PENDING
     private Boolean flagged;
     private Boolean overriddenFlagged;

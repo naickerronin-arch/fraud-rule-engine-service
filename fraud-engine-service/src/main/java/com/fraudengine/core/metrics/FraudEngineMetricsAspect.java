@@ -2,6 +2,8 @@ package com.fraudengine.core.metrics;
 
 import com.fraudengine.core.controller.model.TransactionOverrideResponse;
 import com.fraudengine.core.event.domain.FraudCheckCompleteEvent;
+import com.fraudengine.core.event.domain.FraudCheckFailedEvent;
+import com.fraudengine.core.event.handler.PendingEvaluationSweeper;
 import com.fraudengine.core.rule.FraudRule;
 import com.fraudengine.core.rule.RuleHitStatus;
 import com.fraudengine.core.rule.RuleResult;
@@ -28,6 +30,7 @@ public class FraudEngineMetricsAspect {
     private static final String METRIC_RULE_DURATION = "fraud.rule.duration";
     private static final String METRIC_FRAUD_CHECK_COMPLETE = "fraud.check.complete";
     private static final String METRIC_TRANSACTION_OVERRIDE = "fraud.transaction.override";
+    private static final String METRIC_FRAUD_CHECK_FAILED = "fraud.check.failed";
     private static final String METRIC_DLT_RECEIVED = "fraud.dlt.received";
     private static final String STATUS_ERROR = "ERROR";
 
@@ -42,6 +45,10 @@ public class FraudEngineMetricsAspect {
             }
             metricsRecorder.register(METRIC_FRAUD_CHECK_COMPLETE, "flagged", flagged);
             metricsRecorder.register(METRIC_TRANSACTION_OVERRIDE, "flagged", flagged);
+        }
+        for (String reason : List.of(PendingEvaluationSweeper.RULES_DID_NOT_REPORT,
+                PendingEvaluationSweeper.TRANSACTION_TYPE_NOT_SUPPORTED)) {
+            metricsRecorder.register(METRIC_FRAUD_CHECK_FAILED, "reason", reason);
         }
         metricsRecorder.register(METRIC_DLT_RECEIVED);
     }
@@ -74,6 +81,16 @@ public class FraudEngineMetricsAspect {
             @Override
             public void afterCommit() {
                 metricsRecorder.increment(METRIC_FRAUD_CHECK_COMPLETE, "flagged", String.valueOf(event.isFlagged()));
+            }
+        });
+    }
+
+    @AfterReturning("execution(* com.fraudengine.core.outbox.OutboxWriter.publish(..)) && args(event)")
+    public void recordFraudCheckFailed(final FraudCheckFailedEvent event) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                metricsRecorder.increment(METRIC_FRAUD_CHECK_FAILED, "reason", event.getReason());
             }
         });
     }

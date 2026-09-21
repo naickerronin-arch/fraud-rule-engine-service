@@ -70,7 +70,7 @@ public class TransactionQueryService {
                 .amount(transaction.getAmount())
                 .transactionType(transaction.getTransactionType())
                 .areaCode(transaction.getAreaCode())
-                .createdAt(transaction.getCreatedAt())
+                .eventTime(transaction.getEventTime())
                 .status(effectiveStatus(transaction))
                 .flagged(transaction.getFlagged())
                 .overriddenFlagged(transaction.getOverriddenFlagged())

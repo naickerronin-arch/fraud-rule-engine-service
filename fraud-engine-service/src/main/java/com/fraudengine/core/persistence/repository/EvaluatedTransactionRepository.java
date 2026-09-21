@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -21,8 +22,8 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
     @Query(
             value = """
                 INSERT INTO evaluated_transactions
-                (id, account_id, amount, transaction_type, area_code, created_at)
-                VALUES (:id, :accountNumber, :amount, :transactionType, :areaCode, :createdAt)
+                (id, account_id, amount, transaction_type, area_code, event_time)
+                VALUES (:id, :accountNumber, :amount, :transactionType, :areaCode, :eventTime)
                 ON CONFLICT (id) DO NOTHING
                 """,
             nativeQuery = true)
@@ -32,13 +33,39 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
             @Param("amount") BigDecimal amount,
             @Param("transactionType") String transactionType,
             @Param("areaCode") String areaCode,
-            @Param("createdAt") Instant createdAt);
+            @Param("eventTime") Instant eventTime);
 
-    long countByAccountNumberAndCreatedAtAfter(String accountNumber, Instant since);
+    long countByAccountNumberAndEventTimeAfter(String accountNumber, Instant since);
 
     long countByAccountNumber(String accountNumber);
 
-    long countByFlaggedIsNull();
+    long countByFlaggedIsNullAndAbandonedAtIsNull();
+
+    long countByAbandonedAtIsNotNull();
+
+    // rows a rule is mid-completion on are locked, so SKIP LOCKED leaves them to finish
+    @Query(
+            value = """
+                SELECT * FROM evaluated_transactions
+                WHERE flagged IS NULL
+                  AND abandoned_at IS NULL
+                  AND created_at < :cutoff
+                ORDER BY created_at
+                LIMIT :batchSize
+                FOR UPDATE SKIP LOCKED
+                """,
+            nativeQuery = true)
+    List<EvaluatedTransaction> findAwaitingVerdictBefore(@Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
+
+    @Modifying
+    @Query(
+            value = """
+                UPDATE evaluated_transactions
+                SET abandoned_at = :abandonedAt
+                WHERE id = :id
+                """,
+            nativeQuery = true)
+    void markAbandoned(@Param("id") String id, @Param("abandonedAt") Instant abandonedAt);
 
     @Query(
             value = """
@@ -104,7 +131,7 @@ public interface EvaluatedTransactionRepository extends JpaRepository<EvaluatedT
                     WHERE rh.transaction_id = et.id AND rh.rule_type = :ruleType
                   ))
                   AND (:flagged IS NULL OR COALESCE(et.overridden_flagged, et.flagged) = :flagged)
-                ORDER BY et.created_at DESC
+                ORDER BY et.event_time DESC
                 """,
             countQuery = """
                 SELECT count(*) FROM evaluated_transactions et

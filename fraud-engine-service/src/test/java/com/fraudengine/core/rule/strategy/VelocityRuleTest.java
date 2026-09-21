@@ -100,7 +100,7 @@ class VelocityRuleTest {
     @Test
     void shouldRaiseTheThreshold_whenTheAccountHasEnoughHistoryToBeBusy() {
         when(evaluatedTransactionRepository.countByAccountNumber(ACCOUNT_NUMBER)).thenReturn(100L);
-        when(evaluatedTransactionRepository.countByAccountNumberAndCreatedAtAfter(ACCOUNT_NUMBER, BASELINE_START))
+        when(evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(ACCOUNT_NUMBER, BASELINE_START))
                 .thenReturn(21600L);
         givenTransactionsInWindow(15);
 
@@ -113,7 +113,7 @@ class VelocityRuleTest {
     // ========== Helper Methods ==========
 
     private void givenTransactionsInWindow(final long count) {
-        when(evaluatedTransactionRepository.countByAccountNumberAndCreatedAtAfter(ACCOUNT_NUMBER, WINDOW_START))
+        when(evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(ACCOUNT_NUMBER, WINDOW_START))
                 .thenReturn(count);
     }
 }

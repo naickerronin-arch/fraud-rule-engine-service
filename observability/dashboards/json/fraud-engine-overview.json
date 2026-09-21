@@ -57,6 +57,35 @@
       }
     },
     {
+      "id": 19,
+      "type": "stat",
+      "title": "Abandoned (no verdict)",
+      "gridPos": { "x": 0, "y": 52, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "fraud_transactions_abandoned", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Fraud checks abandoned (last hour)",
+      "gridPos": { "x": 6, "y": 52, "w": 18, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(fraud_check_failed_total[1h]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 17,
       "type": "stat",
       "title": "Failed outbox events",

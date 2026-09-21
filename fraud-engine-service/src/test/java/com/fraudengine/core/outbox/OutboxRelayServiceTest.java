@@ -99,6 +99,17 @@ class OutboxRelayServiceTest {
         assertThat(deadLetter.getCreatedAt()).isEqualTo(CREATED_AT);
     }
 
+    @Test
+    void shouldTruncateTheError_whenTheBrokerMessageIsLongerThanTheColumn() {
+        OutboxEvent event = givenPendingEvent(null);
+        when(kafkaTemplate.send(any(Message.class)))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("x".repeat(1500))));
+
+        service.relay();
+
+        assertThat(event.getLastError()).hasSize(1000);
+    }
+
     // ========== Helper Methods ==========
 
     private OutboxEvent givenPendingEvent(final Integer attemptCount) {

@@ -41,7 +41,7 @@ public class VelocityRule implements FraudRule {
         Instant windowStart = transactionEvent.getTimestamp().minus(Duration.ofMinutes(applicationProperties.getVelocityConfig().getWindowMinutes()));
 
         // window counts within period
-        long windowCount = evaluatedTransactionRepository.countByAccountNumberAndCreatedAtAfter(accountNumber, windowStart);
+        long windowCount = evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(accountNumber, windowStart);
 
         double threshold = fetchBaseLine(applicationProperties.getVelocityConfig(), transactionEvent);
         double alertThreshold = threshold * applicationProperties.getVelocityConfig().getAlertThreshold();
@@ -80,7 +80,7 @@ public class VelocityRule implements FraudRule {
         }
 
         Instant transactionWindowStart = transaction.getTimestamp().minus(Duration.ofDays(velocityConfig.getTransactionWindow()));
-        long totalTransactionsInPeriod = evaluatedTransactionRepository.countByAccountNumberAndCreatedAtAfter(accountNumber, transactionWindowStart);
+        long totalTransactionsInPeriod = evaluatedTransactionRepository.countByAccountNumberAndEventTimeAfter(accountNumber, transactionWindowStart);
 
         long windowsInPeriod= Duration.ofDays(velocityConfig.getTransactionWindow()).toMinutes()
                 / velocityConfig.getWindowMinutes();

@@ -39,6 +39,7 @@ class BacklogMetricsTest {
     @Test
     void shouldRegisterEveryGaugeAtZero_whenBoundBeforeTheFirstRefresh() {
         assertThat(gauge("fraud.transactions.pending")).isZero();
+        assertThat(gauge("fraud.transactions.abandoned")).isZero();
         assertThat(outboxGauge(OutboxStatus.PENDING)).isZero();
         assertThat(outboxGauge(OutboxStatus.PUBLISHED)).isZero();
         assertThat(outboxGauge(OutboxStatus.FAILED)).isZero();
@@ -46,9 +47,11 @@ class BacklogMetricsTest {
 
     // ========== refresh() Tests ==========
 
+    // abandoned rows are counted separately, or the pending tile would stay red forever
     @Test
     void shouldReportTheDatabaseCounts_whenRefreshed() {
-        when(evaluatedTransactionRepository.countByFlaggedIsNull()).thenReturn(3L);
+        when(evaluatedTransactionRepository.countByFlaggedIsNullAndAbandonedAtIsNull()).thenReturn(3L);
+        when(evaluatedTransactionRepository.countByAbandonedAtIsNotNull()).thenReturn(7L);
         when(outboxEventRepository.countByStatus(OutboxStatus.PENDING)).thenReturn(2L);
         when(outboxEventRepository.countByStatus(OutboxStatus.PUBLISHED)).thenReturn(40L);
         when(outboxEventRepository.countByStatus(OutboxStatus.FAILED)).thenReturn(1L);
@@ -56,6 +59,7 @@ class BacklogMetricsTest {
         backlogMetrics.refresh();
 
         assertThat(gauge("fraud.transactions.pending")).isEqualTo(3.0);
+        assertThat(gauge("fraud.transactions.abandoned")).isEqualTo(7.0);
         assertThat(outboxGauge(OutboxStatus.PENDING)).isEqualTo(2.0);
         assertThat(outboxGauge(OutboxStatus.PUBLISHED)).isEqualTo(40.0);
         assertThat(outboxGauge(OutboxStatus.FAILED)).isEqualTo(1.0);

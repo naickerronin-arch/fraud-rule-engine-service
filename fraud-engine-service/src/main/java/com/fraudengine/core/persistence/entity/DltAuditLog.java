@@ -32,7 +32,11 @@ public class DltAuditLog {
 
     private Long originalOffset;
 
+    private String originalConsumerGroup;
+
     private String exceptionClass;
+
+    private String exceptionCauseClass;
 
     private String exceptionMessage;
 

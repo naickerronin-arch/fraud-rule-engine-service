@@ -11,9 +11,11 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fraudengine.core.event.domain.FraudCheckCompleteEvent;
+import com.fraudengine.core.event.domain.FraudCheckFailedEvent;
 import com.fraudengine.core.persistence.entity.OutboxEvent;
 import com.fraudengine.core.persistence.repository.OutboxEventRepository;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,6 +75,31 @@ class OutboxWriterTest {
         assertThatThrownBy(() -> writer.publish(testEvent)).isInstanceOf(RuntimeException.class);
 
         verifyNoInteractions(outboxEventRepository);
+    }
+
+    // its own topic, so a consumer of verdicts can never read a failure as a clear verdict
+    @Test
+    void shouldWriteTheFailureToItsOwnTopic_whenAnEvaluationIsAbandoned() {
+        OutboxWriter writer = writer(new ObjectMapper().findAndRegisterModules());
+
+        writer.publish(FraudCheckFailedEvent.builder()
+                .transactionId("txn-1")
+                .accountNumber("ACC-1")
+                .reason("RULES_DID_NOT_REPORT")
+                .missingRules(List.of("GEO"))
+                .failedAt(Instant.now())
+                .build());
+
+        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+
+        OutboxEvent saved = captor.getValue();
+        assertThat(saved.getAggregateType()).isEqualTo("FraudCheckFailed");
+        assertThat(saved.getTopic()).isEqualTo("local-fraud-check-failed");
+        assertThat(saved.getAggregateId()).isEqualTo("txn-1");
+        assertThat(saved.getPartitionKey()).isEqualTo("ACC-1");
+        assertThat(saved.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(saved.getPayload()).contains("\"missingRules\":[\"GEO\"]");
     }
 
     // ========== Helper Methods ==========

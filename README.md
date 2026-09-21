@@ -7,6 +7,57 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 
 ## Architecture summary
 
+**Request path** (REST, everything behind one host port):
+
+```
+                        ┌───────────────────────┐
+  curl / Swagger UI     │   api-gateway :8888   │──/fraud-service/**──► fraud-engine-service :8081
+          │  Bearer JWT │  validate the JWT     │──/dexLogin/**───────► login-service :8090
+          └────────────►│  aud claim → role     │──/demo/**───────────► demo-service :8095
+                        │  route, per-route     │
+                        │  response timeouts    │──JWKS───────────────► dex :5556 (OIDC)
+                        └───────────────────────┘
+```
+
+**Event path** (fraud detection itself, no REST involved):
+
+```
+  upstream producer (not in repo) · demo-service
+                    │
+                    ▼
+  ┌───────────────────────────────────────────┐  keyed by account, so one account's
+  │ local-transaction-created, 6 partitions   │  transactions stay in order
+  └────┬────────────┬────────────┬────────────┘
+       │            │            │
+       ▼            ▼            ▼
+   velocity    behavioural   location          one consumer group per rule, so
+     group        group        group           every rule sees every transaction
+       │            │            │
+       └────────────┬────────────┘
+                    │  validate · upsert the transaction row · write this rule's hit
+                    ▼
+  ┌───────────────────────────────────────────┐
+  │ lock the transaction row and count the    │  Postgres holds evaluated_transactions,
+  │ hits; whichever rule finds them all       │  rule_hits, bad_locations, outbox_events,
+  │ writes the verdict and the outbox row     │  dlt_audit_log and dead_letter
+  │ in one database transaction               │
+  └─────────────────┬─────────────────────────┘
+                    │  outbox relay, every 100 ms
+                    ▼
+                    local-fraud-check-complete  ───────────────►  downstream consumers
+
+  deserialization or validation failure, retries exhausted
+      local-transaction-created-dlt  ──► dlt audit group  ──►  dlt_audit_log
+  no verdict after app.pending-evaluation.abandon-after-minutes
+      pending sweeper  ──► local-fraud-check-failed  ─────►  downstream consumers
+```
+
+**Observability:** the gateway and the engine expose `/actuator/prometheus` and send OTLP spans
+to Tempo; Grafana (`:3000`) reads both.
+
+Only two ports reach the host: the gateway (`8888`) and Grafana (`3000`). Everything else talks
+over the compose network.
+
 **Services:**
 
 - **`api-gateway`** — the only host-exposed entry point (`:8888`). Validates JWTs against

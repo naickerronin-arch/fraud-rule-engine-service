@@ -54,6 +54,10 @@ app:
     retry-attempts: 3
     retry-initial-interval-ms: 500
     retry-backoff-multiplier: 2.0
+  pending-evaluation:
+    sweep-interval-ms: 60000
+    abandon-after-minutes: ${ABANDON_AFTER_MINUTES:5}
+    batch-size: 50
   outbox:
     relay-interval-ms: 100
     send-timeout-ms: 5000

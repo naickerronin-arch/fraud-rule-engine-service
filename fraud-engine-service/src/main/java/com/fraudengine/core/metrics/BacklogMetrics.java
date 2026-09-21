@@ -23,11 +23,15 @@ public class BacklogMetrics implements MeterBinder {
     private final OutboxEventRepository outboxEventRepository;
 
     private final AtomicLong pendingTransactions = new AtomicLong();
+    private final AtomicLong abandonedTransactions = new AtomicLong();
     private final Map<OutboxStatus, AtomicLong> outboxEvents = new ConcurrentHashMap<>();
 
     @Override
     public void bindTo(final MeterRegistry registry) {
         Gauge.builder("fraud.transactions.pending", pendingTransactions, AtomicLong::get)
+                .register(registry);
+
+        Gauge.builder("fraud.transactions.abandoned", abandonedTransactions, AtomicLong::get)
                 .register(registry);
 
         for (OutboxStatus status : OutboxStatus.values()) {
@@ -39,7 +43,8 @@ public class BacklogMetrics implements MeterBinder {
 
     @Scheduled(fixedDelay = 30000)
     public void refresh() {
-        pendingTransactions.set(evaluatedTransactionRepository.countByFlaggedIsNull());
+        pendingTransactions.set(evaluatedTransactionRepository.countByFlaggedIsNullAndAbandonedAtIsNull());
+        abandonedTransactions.set(evaluatedTransactionRepository.countByAbandonedAtIsNotNull());
 
         for (OutboxStatus status : OutboxStatus.values()) {
             outboxCount(status).set(outboxEventRepository.countByStatus(status));
