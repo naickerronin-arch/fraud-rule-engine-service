@@ -1,5 +1,6 @@
 package com.fraudengine.gateway.configuration;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -17,13 +18,13 @@ import java.util.List;
 
 @Configuration
 @Slf4j
+@RequiredArgsConstructor
 @EnableWebFluxSecurity
 public class SecurityConfiguration {
 
+    private final ApplicationProperties applicationProperties;
+
     private static final String[] ROOT = {"/"};
-    private static final String[] LOGIN_ROUTES = {
-            "/dexLogin/**"
-    };
     private static final String[] ACTUATOR_ROUTES = {
             "/actuator/refresh",
             "/actuator/gateway/**",
@@ -49,9 +50,6 @@ public class SecurityConfiguration {
             "/*/*/swagger-ui/config",
             "/*/*/*/swagger-ui/config/**"
     };
-    private static final String[] COMPLIANCE_TEAM = {
-            "/fraud-service/admin/transactions/*/override"
-    };
 
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
@@ -64,9 +62,9 @@ public class SecurityConfiguration {
                         .permitAll()
                         .pathMatchers(SWAGGER_ROUTES)
                         .permitAll()
-                        .pathMatchers(LOGIN_ROUTES)
+                        .pathMatchers(applicationProperties.getSecurityConfig().getLoginPaths().toArray(String[]::new))
                         .permitAll()
-                        .pathMatchers(HttpMethod.POST,COMPLIANCE_TEAM)
+                        .pathMatchers(HttpMethod.POST, applicationProperties.getSecurityConfig().getComplianceTeamPaths().toArray(String[]::new))
                         .hasRole("ComplianceTeam")
                         .anyExchange()
                         .authenticated())

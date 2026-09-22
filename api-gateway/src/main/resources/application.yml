@@ -30,6 +30,13 @@ spring:
               predicates:
                 - Path=/dexLogin/**
 
+app:
+  security-config:
+    login-paths:
+      - /dexLogin/**
+    compliance-team-paths:
+      - /fraud-service/admin/transactions/*/override
+
 management:
   endpoints:
     web:
