@@ -34,6 +34,7 @@ public class AdminService {
 
             Instant overriddenAt = Instant.now();
             evaluatedTransactionRepository.applyOverride(transactionId, request.getFlagged(), overriddenAt);
+            log.info("Verdict overridden: transactionId={} flagged={}", transactionId, request.getFlagged());
 
             return TransactionOverrideResponse.builder()
                     .transactionId(transactionId)

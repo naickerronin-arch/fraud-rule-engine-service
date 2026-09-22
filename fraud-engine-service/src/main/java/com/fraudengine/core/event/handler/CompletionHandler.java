@@ -13,6 +13,7 @@ import com.fraudengine.core.rule.FraudRule;
 import com.fraudengine.core.rule.RiskScoreCalculator;
 import com.fraudengine.core.rule.RuleType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class CompletionHandler {
@@ -57,6 +59,8 @@ public class CompletionHandler {
 
         FraudCheckCompleteEvent completeEvent = buildCompleteEvent(event, hits, flagged, weightedRiskScore);
         outboxWriter.publish(completeEvent);
+        log.info("Fraud check complete: transactionId={} flagged={} weightedRiskScore={}",
+                event.getTransactionId(), flagged, weightedRiskScore);
     }
 
     private boolean isFlagged(final List<RuleHit> hits, final int weightedRiskScore) {

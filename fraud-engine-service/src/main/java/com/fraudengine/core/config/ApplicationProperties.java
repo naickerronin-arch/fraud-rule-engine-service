@@ -67,7 +67,7 @@ public class ApplicationProperties {
 
     @Data
     public static class PendingEvaluationConfig {
-        private int abandonAfterMinutes = 5; // comfortably past the retry ladder and normal consumer lag
+        private int abandonAfterMinutes = 5; // pending time till abandon rule eval for transaction
         private int batchSize = 50;
     }
 

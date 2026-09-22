@@ -43,7 +43,8 @@ public class OutboxRelayService {
                 event.setStatus(OutboxStatus.PUBLISHED);
                 event.setPublishedAt(Instant.now());
                 outboxEventRepository.save(event);
-                log.trace("Successfully relayed event: id={}, topic={}", event.getId(), event.getTopic());
+                log.info("Published to Kafka: aggregateType={} transactionId={} topic={}",
+                        event.getAggregateType(), event.getAggregateId(), event.getTopic());
             } catch (Exception e) {
                 handleFailure(event, e);
             }

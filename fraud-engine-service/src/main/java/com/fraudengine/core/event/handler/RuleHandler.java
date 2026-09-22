@@ -52,6 +52,8 @@ public class RuleHandler {
                 result.flagged(),
                 result.riskLevel(),
                 Instant.now());
+        log.info("Rule hit recorded: transactionId={} rule={} status={} flagged={} riskLevel={}",
+                event.getTransactionId(), rule.ruleType(), result.status(), result.flagged(), result.riskLevel());
 
         completionHandler.checkCompletion(event);
     }
