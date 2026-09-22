@@ -25,18 +25,6 @@ services:
       dex:
         condition: service_started
 
-  demo-service:
-    build:
-      context: ./demo-service
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-local}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      FRAUD_ENGINE_URL: http://fraud-engine-service:8081/fraud-service
-      GATEWAY_EXTERNAL_URL: ${GATEWAY_EXTERNAL_URL:-http://localhost:8888}
-    depends_on:
-      fraud-engine-service:
-        condition: service_healthy
-
   dex:
     image: dexidp/dex:latest-alpine
     command: [ "dex", "serve", "/etc/dex/config.yaml" ]

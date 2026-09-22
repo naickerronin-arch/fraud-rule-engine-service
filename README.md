@@ -7,22 +7,59 @@ enforcing JWT auth and role-based access, with human override as a correction, n
 
 ## Architecture summary
 
+**Overview** (every component, and how they connect):
+
+```
+  Analysts · Postman · curl
+                 │ Bearer JWT
+                 ▼
+  ┌─────────────────────────────┐               ┌─────────────────┐         ┌───────────────┐
+  │      api-gateway :8888      │               │  login-service  │         │   Dex :5556   │
+  │     verify JWT · roles      │─/dexLogin/**─►│      :8090      │─/token─►│  OIDC issuer  │
+  │                             │               │                 │         │ signs tokens  │
+  └──────────────┬──────────────┘               └─────────────────┘         └───────────────┘
+                 │ /fraud-service/**                                               ▲
+                 ▼                                                                 │
+  ┌────────────────────────────────────────────────────────────────────────────────┴────────┐
+  │ fraud-engine-service :8081                                                              │
+  │                                                                                         │
+  │ REST API              3 rule consumers        completion            background jobs     │
+  │ list · detail ·       velocity · behavioural  row lock → score →    outbox relay 100 ms │
+  │ override              · location, own groups  verdict + outbox row  sweeper, every 60 s │
+  └────────────────────────────────────┬───────────────────────────────────────┬────────────┘
+                                       │ reads · writes                        │ JDBC
+                                       ▼                                       ▼
+                       ┌───────────────────────────────┐           ┌────────────────────────┐
+                       │ Kafka ·                       │           │ Postgres               │
+ upstream producer ───►│ transaction-created           │           │ evaluated_transactions │
+                       │ transaction-created-dlt       │           │ rule_hits              │
+ downstream ◄──────────│ fraud-check-complete          │           │ bad_locations          │
+ consumers  ◄──────────│ fraud-check-failed            │           │ outbox_events          │
+                       └───────────────────────────────┘           │ dead_letter            │
+                                                                   │ dlt_audit_log          │
+                                                                   └────────────────────────┘
+
+  gateway, engine ──/actuator/prometheus──► Prometheus ──┐
+  gateway, engine ──OTLP traces───────────► Tempo ───────┴──► Grafana :3000
+```
+
+The two diagrams below zoom in on the request path and the event path.
+
 **Request path** (REST, everything behind one host port):
 
 ```
                         ┌───────────────────────┐
   curl / Swagger UI     │   api-gateway :8888   │──/fraud-service/**──► fraud-engine-service :8081
           │  Bearer JWT │  validate the JWT     │──/dexLogin/**───────► login-service :8090
-          └────────────►│  aud claim → role     │──/demo/**───────────► demo-service :8095
-                        │  route, per-route     │
-                        │  response timeouts    │──JWKS───────────────► dex :5556 (OIDC)
+          └────────────►│  aud claim → role     │
+                        │  route                │──JWKS───────────────► dex :5556 (OIDC)
                         └───────────────────────┘
 ```
 
 **Event path** (fraud detection itself, no REST involved):
 
 ```
-  upstream producer (not in repo) · demo-service
+             upstream producer
                     │
                     ▼
   ┌───────────────────────────────────────────┐  keyed by account, so one account's
@@ -62,7 +99,7 @@ over the compose network.
 
 - **`api-gateway`** — the only host-exposed entry point (`:8888`). Validates JWTs against
   Dex, derives a role (`FraudTeam` / `ComplianceTeam`) from the token's `aud` claim, enforces
-  the `ComplianceTeam`-only override endpoint, and routes to the two internal services with a
+  the `ComplianceTeam`-only override endpoint, and routes to the internal services with a
   5s response timeout. Errors use Spring Boot's default error responses.
 - **`login-service`** — dev/demo convenience only, no host port of its own (reached through
   the gateway at `/dexLogin/**`). Wraps a password-grant call to Dex so grading doesn't
@@ -75,7 +112,7 @@ over the compose network.
   deployment would already have. No host port — only the gateway and login-service talk
   to it, never a browser directly.
 - **`kafka` / `kafka-init`** — single-broker KRaft cluster (no Zookeeper); `kafka-init` is a
-  one-shot container that creates the transaction-created/DLT/fraud-check-complete topics
+  one-shot container that creates the transaction-created/DLT/fraud-check-complete/fraud-check-failed topics
   before anything else starts.
 - **`fraud-db` (Postgres)** — primary datastore.
 - **`prometheus`, `tempo`, `grafana`** — metrics, traces, and one dashboard UI over both.
@@ -95,9 +132,22 @@ relay publishes outbox rows to Kafka and marks them `PUBLISHED`, retrying with b
 marking them `FAILED` (plus a `dead_letter` row) after 5 attempts. Invalid or undeserializable
 messages go to `${environment}-transaction-created-dlt` and are recorded in `dlt_audit_log`.
 
+**When a verdict never comes:** a transaction only completes when a rule reports, so a
+dead-lettered record, a consumer that was down, or a rule removed from the configuration would
+leave it pending forever. A sweeper runs every minute over transactions with no verdict older
+than `app.pending-evaluation.abandon-after-minutes`, retries completion first (a missed
+completion just finishes), and otherwise marks the transaction abandoned and publishes a
+`FraudCheckFailed` event naming the rules that never reported. It goes to its own
+`${environment}-fraud-check-failed` topic rather than a field on the completion event, so a
+consumer can never mistake a failed check for a clear verdict. A rule reporting late still
+completes the transaction normally, so consumers must tolerate a verdict arriving after a failure.
+
 **Active rules** (`fraud-engine-service/.../rule/strategy/`):
 - **Velocity** — flags an account exceeding a transaction-count threshold within a rolling
-  window. Standalone-capable: confident enough on its own evidence to flag a transaction
+  10-minute window. The threshold adapts to the account: its busiest window in the last 30 days
+  × 1.5, never below 5, with any window that had fraud in it left out so a past burst can't
+  teach the rule that bursts are normal. Risk starts at the threshold and it flags at twice
+  that. Standalone-capable: confident enough on its own evidence to flag a transaction
   by itself.
 - **Behavioral deviation** — flags a transaction whose amount deviates from an account's
   own historical baseline, with a cohort-level fallback baseline (same transaction type) so
@@ -215,13 +265,17 @@ and are kept as an audit trail with a `PENDING` / `PUBLISHED` / `FAILED` status)
 
 ## Known limitations
 
-- Rule history isn't bounded to the evaluated transaction's timestamp. Because each rule is its
-  own consumer group, a rule that falls behind the others can count transactions for the same
-  account that arrived after the one it's evaluating.
+- Only velocity's counts stop at the evaluated transaction's own timestamp. Behavioural's
+  baseline, location's area rate and the history-size check both rules use still read the whole
+  history, so if a rule falls behind (each is its own consumer group) they can include
+  transactions that came after the one being evaluated.
 - `fraud-engine-service`'s Prometheus metrics are reachable through the gateway without a token
   (`/fraud-service/actuator/prometheus`).
 - The database connection pool defaults to 20 connections (`DB_POOL_SIZE`) for 24 consumer
   threads plus the outbox relay and the API; size it to the real load per environment.
+- A rule that reports after the sweeper has given up still completes the transaction, so a
+  consumer can see a `FraudCheckFailed` event followed later by a verdict for the same
+  transaction.
 - Both demo logins share one password, and wrong login credentials return `500` rather than `401`.
 
 ## Running locally
@@ -272,7 +326,7 @@ echo '{"transactionId":"txn-001","accountNumber":"ACC-1001","amount":250.00,"tim
 `Fraud Rule Engine — Overview`, provisioned from `observability/dashboards/json`:
 
 - service up/down, HTTP request rate and p95 latency, JVM heap, gateway 4xx/5xx
-- transactions without a verdict and failed outbox events (both turn red at 1+)
+- transactions without a verdict, abandoned transactions and failed outbox events (all turn red at 1+)
 - Kafka consumer lag per consumer group, DB connection pool usage
 - rule-hit rate, rule errors and average evaluation time per rule
 - fraud flag rate, completion rate, compliance overrides, DLT rate
@@ -288,6 +342,8 @@ echo '{"transactionId":"txn-001","accountNumber":"ACC-1001","amount":250.00,"tim
 | `fraud_dlt_received_total` | — | aspect, on each DLT audit entry |
 | `fraud_transactions_pending` | — | `BacklogMetrics` gauge, refreshed every 30s |
 | `fraud_outbox_events` | `status` | `BacklogMetrics` gauge, refreshed every 30s |
+| `fraud_check_failed_total` | `reason` | aspect, after the sweeper gives up on a transaction |
+| `fraud_transactions_abandoned` | — | `BacklogMetrics` gauge, refreshed every 30s |
 
 The counters are registered at zero on startup, so `rate()` / `increase()` panels count the very
 first event. Error-status and skipped rule series are still created on first use.
@@ -305,9 +361,12 @@ Run them with Maven, or without a local JDK:
 docker run --rm -v "${PWD}/fraud-engine-service:/build" -w /build maven:3.9-eclipse-temurin-25 mvn -B test
 ```
 
+`api-gateway` covers the client-id-to-role mapping that all authorisation hangs off.
+
 Not covered yet, and better suited to Testcontainers integration tests: the repository SQL
 (row lock, stats and area queries), the completion race under real concurrency, and the Kafka
-listener wiring. End-to-end behaviour has been verified manually by pushing transactions onto
+listener wiring. End to end, the Postman collection's Scenarios folder checks every scenario
+verdict after seeding and pushing, and behaviour has also been verified by pushing transactions onto
 Kafka, checking `evaluated_transactions` / `rule_hits` / outbox rows and the metrics, and
 exercising the API through the gateway with tokens for both roles (including `FraudTeam` being
 rejected with `403` from the override endpoint).

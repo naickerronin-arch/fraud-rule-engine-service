@@ -1,0 +1,5 @@
+ACC-BAD|{"transactionId":"scn-bad-type","accountNumber":"ACC-BAD","amount":10.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"CRYPTO","areaCode":"2196"}
+ACC-BAD|{"transactionId":"scn-bad-missing-fields","amount":10.00}
+ACC-BAD|not json
+ACC-BAD|{"transactionId":"scn-bad-area","accountNumber":"ACC-BAD","amount":10.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER","areaCode":"20010"}
+ACC-BAD|{"transactionId":"","accountNumber":"","amount":-500.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER","areaCode":"2196"}

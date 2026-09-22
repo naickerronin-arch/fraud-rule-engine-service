@@ -1,0 +1,414 @@
+{
+  "info": {
+    "name": "Fraud Rule Engine",
+    "description": "Everything goes through the gateway on localhost:8888.\n\n1. Seed the database and push the scenario events (see the README).\n2. Run the Login folder once; it stores both tokens.\n3. Run Scenarios to check every verdict, or open any request on its own.\n\nRe-running scripts/seed.sql resets the data, including any override made here.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{complianceToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8888" },
+    { "key": "password", "value": "local-dev-password" },
+    { "key": "complianceToken", "value": "" },
+    { "key": "fraudToken", "value": "" },
+    { "key": "transactionId", "value": "scn-velocity-burst" },
+    { "key": "overrideTransactionId", "value": "seed-hot-001" }
+  ],
+  "item": [
+    {
+      "name": "Login",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Log in as compliance-portal",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"logged in\", () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set(\"complianceToken\", pm.response.json().access_token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"compliance-portal\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/dexLogin/auth", "host": ["{{baseUrl}}"], "path": ["dexLogin", "auth"] },
+            "description": "ComplianceTeam token: every endpoint, including overrides. Stored as complianceToken, which the whole collection uses by default."
+          }
+        },
+        {
+          "name": "Log in as fraud-portal",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"logged in\", () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set(\"fraudToken\", pm.response.json().access_token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"fraud-portal\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/dexLogin/auth", "host": ["{{baseUrl}}"], "path": ["dexLogin", "auth"] },
+            "description": "FraudTeam token: can read everything but can't override. Stored as fraudToken."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenarios",
+      "description": "One request per event in scripts/scenarios.txt. Each checks the verdict the seeded history is built to produce.",
+      "item": [
+        {
+          "name": "clear-transfer (CLEAR)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is CLEAR\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"CLEAR\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-clear-transfer", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-clear-transfer"] },
+            "description": "205.00 from ACC-CLEAR, whose 30 days of history average 200. Every rule scores 0."
+          }
+        },
+        {
+          "name": "velocity-burst (FLAGGED)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is FLAGGED\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"FLAGGED\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-velocity-burst", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-velocity-burst"] },
+            "description": "ACC-BURST's tenth transaction in ten minutes. Velocity scores 100 and flags on its own; the weighted score is 50."
+          }
+        },
+        {
+          "name": "amount-spike (FLAGGED)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is FLAGGED\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"FLAGGED\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-amount-spike", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-amount-spike"] },
+            "description": "2000.00 from ACC-SPIKE, whose history averages 200 with a standard deviation of 14.4. Behavioural flags on its own even though the weighted score is only 20."
+          }
+        },
+        {
+          "name": "hotspot-alone (CLEAR)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is CLEAR\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"CLEAR\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-hotspot-alone", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-hotspot-alone"] },
+            "description": "A new account withdrawing in area 2001, where 85% of past transactions were flagged. Location scores 80 but can't flag on its own: (80 × 0.3) / 0.8 = 30."
+          }
+        },
+        {
+          "name": "hotspot-with-velocity (FLAGGED)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is FLAGGED\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"FLAGGED\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-hotspot-with-velocity", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-hotspot-with-velocity"] },
+            "description": "ACC-HOTVEL's seventh withdrawal in ten minutes, in area 2001. Velocity 70 and location 80, and neither flags alone: (70 × 0.5 + 80 × 0.3) / 0.8 = 73."
+          }
+        },
+        {
+          "name": "missing-area (FLAGGED)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"found\", () => pm.response.to.have.status(200));",
+                "pm.test(\"verdict is FLAGGED\", () => pm.expect(pm.response.json().transaction.status).to.eql(\"FLAGGED\"));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/scn-missing-area", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "scn-missing-area"] },
+            "description": "No area code, so location is skipped and the weights are rescaled over the two rules that ran: (70 × 0.5 + 69 × 0.2) / 0.7 = 69. Divided by the full 1.0 it would score 48 and clear."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "List transactions",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            },
+            "description": "Newest event time first. status is the effective verdict: an override wins over the system's own."
+          }
+        },
+        {
+          "name": "Flagged transactions",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?status=FLAGGED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "status", "value": "FLAGGED" }, { "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            },
+            "description": "status is FLAGGED or CLEAR. Any other value, PENDING included, means no filter."
+          }
+        },
+        {
+          "name": "Transactions for one account",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?accountNumber=ACC-BURST&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "accountNumber", "value": "ACC-BURST" }, { "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            },
+            "description": "The burst that tripped velocity: nine seeded transactions in the ten minutes before the flagged one."
+          }
+        },
+        {
+          "name": "Transactions a rule evaluated",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?ruleType=BEHAVIORAL_DEVIATION&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "ruleType", "value": "BEHAVIORAL_DEVIATION" }, { "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            },
+            "description": "Filters on rule hits, so seeded history (which has none) is left out. ruleType is VELOCITY, GEO or BEHAVIORAL_DEVIATION."
+          }
+        },
+        {
+          "name": "Transaction detail",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/{{transactionId}}", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "{{transactionId}}"] },
+            "description": "The transaction and every rule's hit: status, flagged and risk level. Change the transactionId variable to look at another one."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Bad locations",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"ok\", () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/admin/locations?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "admin", "locations"],
+              "query": [{ "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            },
+            "description": "Each area's current tier, 0 to 3. The location rule recomputes it on every transaction, so an area appears here once an event from it has been evaluated."
+          }
+        },
+        {
+          "name": "Override a verdict",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"ok\", () => pm.response.to.have.status(200));",
+                "pm.test(\"override stored\", () => pm.expect(pm.response.json().overriddenFlagged).to.eql(true));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"flagged\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/admin/transactions/{{overrideTransactionId}}/override",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "admin", "transactions", "{{overrideTransactionId}}", "override"]
+            },
+            "description": "ComplianceTeam only. Marks a seeded clear withdrawal in area 2001 as fraud. The system's own verdict is kept alongside the override, and the area's fraud rate now counts it as flagged."
+          }
+        },
+        {
+          "name": "Override as the fraud team (403)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"forbidden\", () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{fraudToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"flagged\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/admin/transactions/{{overrideTransactionId}}/override",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "admin", "transactions", "{{overrideTransactionId}}", "override"]
+            },
+            "description": "Same request with a FraudTeam token. The gateway rejects it, so the engine never sees it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "item": [
+        {
+          "name": "No token (401)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"unauthorised\", () => pm.response.to.have.status(401));"] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions"] }
+          }
+        },
+        {
+          "name": "Unknown transaction (404)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"not found\", () => pm.response.to.have.status(404));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/fraud-service/transactions/does-not-exist", "host": ["{{baseUrl}}"], "path": ["fraud-service", "transactions", "does-not-exist"] }
+          }
+        },
+        {
+          "name": "Override without a verdict (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"bad request\", () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/admin/transactions/{{overrideTransactionId}}/override",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "admin", "transactions", "{{overrideTransactionId}}", "override"]
+            }
+          }
+        },
+        {
+          "name": "Page that isn't a number (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"bad request\", () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?page=abc",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "page", "value": "abc" }]
+            }
+          }
+        },
+        {
+          "name": "Page size of zero (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"bad request\", () => pm.response.to.have.status(400));", "pm.test(\"names the parameter\", () => pm.expect(pm.response.json().errors[0].field).to.eql(\"size\"));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?size=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "size", "value": "0" }]
+            },
+            "description": "Page size must be 1 to 100; page must be 0 or more."
+          }
+        },
+        {
+          "name": "Page size over 100 (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test(\"bad request\", () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fraud-service/transactions?size=101",
+              "host": ["{{baseUrl}}"],
+              "path": ["fraud-service", "transactions"],
+              "query": [{ "key": "size", "value": "101" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+ACC-CLEAR|{"transactionId":"scn-clear-transfer","accountNumber":"ACC-CLEAR","amount":205.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER","areaCode":"2196"}
+ACC-BURST|{"transactionId":"scn-velocity-burst","accountNumber":"ACC-BURST","amount":200.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER","areaCode":"2196"}
+ACC-SPIKE|{"transactionId":"scn-amount-spike","accountNumber":"ACC-SPIKE","amount":2000.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER","areaCode":"2196"}
+ACC-HOTSPOT|{"transactionId":"scn-hotspot-alone","accountNumber":"ACC-HOTSPOT","amount":200.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"ATM_WITHDRAWAL","areaCode":"2001"}
+ACC-HOTVEL|{"transactionId":"scn-hotspot-with-velocity","accountNumber":"ACC-HOTVEL","amount":200.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"ATM_WITHDRAWAL","areaCode":"2001"}
+ACC-NOAREA|{"transactionId":"scn-missing-area","accountNumber":"ACC-NOAREA","amount":250.00,"timestamp":"2026-01-15T12:00:00Z","transactionType":"TRANSFER"}
