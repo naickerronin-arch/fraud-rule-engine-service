@@ -3,7 +3,6 @@ package com.fraudengine.login.controller;
 import com.fraudengine.login.service.dto.LoginRequest;
 import com.fraudengine.login.service.dto.LoginResponse;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
