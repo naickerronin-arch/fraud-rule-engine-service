@@ -1,0 +1,53 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: fraud-engine
+    folder: Fraud Engine
+    interval: 1m
+    rules:
+      - uid: dlt-any-traffic
+        title: Transactions sent to the dead-letter topic
+        condition: THRESHOLD
+        # 2m stops the alert flapping as the 5m window slides off a burst,
+        # which otherwise sends a fire and a resolve every minute
+        for: 2m
+        # the counter is registered at zero on startup, so a missing series means
+        # the engine is down, which is a different alert
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: warning
+          channel: telegram
+        annotations:
+          summary: '{{ $values.QUERY.Value }} transaction event(s) could not be processed in the last 5 minutes and were sent to the dead-letter topic. Those transactions have no fraud verdict.'
+          action: 'Check the dlt_audit_log table for the reason. Three rows for one transaction id means every rule rejected the payload, so the producer sent bad data. A single row means one rule or one pod is failing.'
+        data:
+          - refId: QUERY
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: QUERY
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              # round() because increase() extrapolates and returns fractions
+              expr: round(sum(increase(fraud_dlt_received_total[5m])))
+              instant: true
+              range: false
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: threshold
+              expression: QUERY
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]

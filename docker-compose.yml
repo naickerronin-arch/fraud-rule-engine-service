@@ -123,7 +123,11 @@ services:
     depends_on:
       - prometheus
       - tempo
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./observability/dashboards/provider.yml:/etc/grafana/provisioning/dashboards/provider.yml:ro
       - ./observability/dashboards/json:/etc/grafana/provisioning/dashboards/json:ro
+      - ./observability/alerting:/etc/grafana/provisioning/alerting:ro
